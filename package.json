@@ -1,7 +1,7 @@
 {
   "name": "qandil-weather",
   "private": true,
-  "version": "3.4.6",
+  "version": "3.4.7",
   "description": "Typed weather domain core and build tooling for the Qandil Android weather app",
   "scripts": {
     "build:core": "tsc --strict --target ES2020 --module none --outFile dist/weather-core.js src/core/weather-core.ts",
