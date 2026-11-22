@@ -149,7 +149,7 @@ footer b{font-weight:600;opacity:1}
   <form class="search" id="f">
     <div class="status-dot" id="statusDot" title="آنلاین"></div>
     <span>🔍</span>
-    <input id="q" placeholder="جستجوی شهر" autocomplete="off" aria-label="جستجوی شهر">
+    <input id="q" type="search" lang="en" dir="ltr" inputmode="search" spellcheck="false" maxlength="80" placeholder="جستجوی شهر" autocomplete="off" aria-label="جستجوی شهر">
     <button type="button" id="loc" aria-label="موقعیت من">📍</button>
     <button type="button" id="bell" aria-label="اعلان بارش" title="فعال‌سازی اعلان بارش">🔔</button>
     <button type="button" id="install" aria-label="نصب اپ" title="نصب" hidden>⬇️</button>
@@ -329,7 +329,7 @@ const API = (lat, lon) =>
 const AQI_API = (lat, lon) =>
   `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=auto`;
 const GEO_API = v =>
-  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=100&language=${encodeURIComponent(appLang)}`;
+  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=30&language=en&format=json`;
 
 const get = async u => {
   const controller = new AbortController();
@@ -850,41 +850,78 @@ async function load(lat, lon, name, region){
   }
 }
 
-/* ============ Search ============ */
-let searchTimer, searchAbort;
+/* ============ English global city search ============ */
+let searchTimer, searchAbort, searchSequence = 0;
+const searchCache = new Map();
+const escapeSearchText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+  '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+}[ch]));
+const normalizeCityQuery = value => String(value || '')
+  .normalize('NFKC')
+  .replace(/[\u0000-\u001f\u007f]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, 80);
+
+async function searchCities(query, signal) {
+  const key = query.toLocaleLowerCase('en');
+  if (searchCache.has(key)) return searchCache.get(key);
+  const response = await fetch(GEO_API(query), { signal });
+  if (!response.ok) throw new Error('Geocoding HTTP ' + response.status);
+  const payload = await response.json();
+  const unique = new Map();
+  for (const city of (Array.isArray(payload.results) ? payload.results : [])) {
+    if (!Number.isFinite(city.latitude) || !Number.isFinite(city.longitude) || !city.name) continue;
+    const id = city.id ?? (city.latitude.toFixed(3) + ',' + city.longitude.toFixed(3));
+    if (!unique.has(id)) unique.set(id, city);
+  }
+  const results = [...unique.values()].sort((a, b) =>
+    (Number(b.population) || 0) - (Number(a.population) || 0)
+  ).slice(0, 20);
+  if (searchCache.size >= 60) searchCache.delete(searchCache.keys().next().value);
+  searchCache.set(key, results);
+  return results;
+}
+
 $('q').addEventListener('input', e => {
   clearTimeout(searchTimer);
-  const v = e.target.value.trim();
-  if (v.length < 2){ $('sug').hidden = true; return; }
+  const query = normalizeCityQuery(e.target.value);
+  const sequence = ++searchSequence;
+  if (searchAbort) searchAbort.abort();
+  const list = $('sug');
+  if (query.length < 2) { list.hidden = true; list.innerHTML = ''; return; }
+  list.innerHTML = '<li class="empty">در حال جستجو…</li>';
+  list.hidden = false;
   searchTimer = setTimeout(async () => {
-    if (searchAbort) searchAbort.abort();
-    searchAbort = new AbortController();
-    const s = $('sug');
-    s.innerHTML = '<li class="empty">در حال جستجو…</li>';
-    s.hidden = false;
+    const controller = new AbortController();
+    searchAbort = controller;
+    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
-      const r = await fetch(GEO_API(v), { signal: searchAbort.signal }).then(x => {
-        if (!x.ok) throw new Error('HTTP ' + x.status);
-        return x.json();
-      });
-      const results = r.results || [];
-      if (!results.length){
-        s.innerHTML = '<li class="empty">نتیجه‌ای یافت نشد</li>';
+      const results = await searchCities(query, controller.signal);
+      if (sequence !== searchSequence) return;
+      if (!results.length) {
+        list.innerHTML = '<li class="empty">نتیجه‌ای یافت نشد</li>';
         return;
       }
-      s.innerHTML = results.map(x => {
-        const sub = [x.admin1, x.country].filter(Boolean).join(' · ');
-        return `<li data-a="${x.latitude}" data-o="${x.longitude}" data-n="${x.name}" data-r="${sub}">
-          <span class="r-name">${x.name}</span>
-          ${sub ? `<span class="r-sub">${sub}</span>` : ''}
-        </li>`;
+      list.innerHTML = results.map(city => {
+        const name = escapeSearchText(city.name);
+        const region = escapeSearchText([city.admin1, city.country].filter(Boolean).join(' · '));
+        return '<li data-a="' + city.latitude + '" data-o="' + city.longitude + '" data-n="' + name + '" data-r="' + region + '">' +
+          '<span class="r-name">' + name + '</span>' +
+          (region ? '<span class="r-sub">' + region + '</span>' : '') +
+          '</li>';
       }).join('');
-    } catch(err){
-      if (err.name !== 'AbortError'){
-        s.innerHTML = '<li class="empty">خطا در جستجو — اتصال را بررسی کنید</li>';
+    } catch (error) {
+      if (sequence !== searchSequence) return;
+      if (error.name !== 'AbortError') {
+        list.innerHTML = '<li class="empty">خطا در جستجو — اتصال را بررسی کنید</li>';
+      } else if (controller.signal.aborted) {
+        list.innerHTML = '<li class="empty">مهلت جستجو تمام شد؛ دوباره تلاش کنید</li>';
       }
+    } finally {
+      clearTimeout(timeout);
     }
-  }, 300);
+  }, 400);
 });
 $('sug').addEventListener('click', e => {
   const li = e.target.closest('li[data-a]');
