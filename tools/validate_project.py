@@ -20,7 +20,7 @@ checks = {
     "Qandil app branding is present": "آب‌وهوای قندیل" in html and 'android:label="آب‌وهوای قندیل"' in manifest,
     "Rain probability forecast is present": "precipitation_probability" in html and "precipitation_probability_max" in html,
     "Global city search has no country restriction": "countryCode=IR" not in html and "geocoding-api.open-meteo.com/v1/search" in html,
-    "City search uses English-only geocoding while the app locale stays independent": "geocoding-api.open-meteo.com/v1/search" in html and "language=en" in html and "lang=\"en\" dir=\"ltr\"" in html and "encodeURIComponent(appLang)" not in html,
+    "City search uses English-only geocoding while the app remains Persian": "const GEO_API = v =>" in html and "count=30&language=en" in html and "const appLang = 'fa'" in html,
     "GPS location flow is present": "navigator.geolocation.getCurrentPosition" in html,
     "WebView GPS permission handling is present": "setGeolocationEnabled(true)" in activity and "onGeolocationPermissionsShowPrompt" in activity and "requestCode == 1002" in activity,
     "weather uses selected coordinates": "api.open-meteo.com/v1/forecast?latitude=" in html,
