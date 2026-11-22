@@ -205,8 +205,8 @@ const $ = id => document.getElementById(id);
 const SYSTEM_LANGS = ['fa','en','ar'];
 const deviceLocale = (navigator.languages && navigator.languages[0]) || navigator.language || 'fa';
 const localeBase = deviceLocale.toLowerCase().split(/[-_]/)[0];
-const appLang = SYSTEM_LANGS.includes(localeBase) ? localeBase : (localeBase || 'en');
-const localeTag = appLang === 'fa' ? 'fa-IR' : appLang === 'ar' ? 'ar' : appLang === 'en' ? 'en' : deviceLocale;
+const appLang = 'fa'; // Keep the app interface Persian; city search uses English independently.
+const localeTag = 'fa-IR';
 document.documentElement.lang = appLang;
 document.documentElement.dir = (appLang === 'fa' || appLang === 'ar') ? 'rtl' : 'ltr';
 const numberFormat = new Intl.NumberFormat(localeTag,{maximumFractionDigits:0});
