@@ -10,8 +10,9 @@ page = source.read_text(encoding="utf-8")
 required = [
     'lang="fa"',
     'SYSTEM_LANGS',
-    'language=en',
-    'lang="en" dir="ltr"',
+    "language=${lang}",
+    "Promise.allSettled(['en', 'fa']",
+    'dir="auto"',
     'navigator.geolocation.getCurrentPosition',
     'https://api.open-meteo.com/v1/forecast',
 ]
