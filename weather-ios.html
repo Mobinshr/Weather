@@ -30,11 +30,11 @@ body{font-family:SysEmoji,Vazirmatn,-apple-system,system-ui,sans-serif;color:#ff
 @keyframes pulse-green{0%{box-shadow:0 0 0 0 rgba(74,222,128,.7)}70%{box-shadow:0 0 0 6px rgba(74,222,128,0)}100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
 @keyframes pulse-red{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7)}70%{box-shadow:0 0 0 6px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
 
-#sug{list-style:none;padding:0;margin-top:8px;background:rgba(20,30,50,.72);border-radius:14px;overflow:hidden;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);max-height:55vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+#sug{position:relative;z-index:80;width:100%;list-style:none;padding:0;margin-top:8px;background:rgba(20,30,50,.72);border-radius:14px;overflow:hidden;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);max-height:55vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.35)}
 #sug li{padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px;transition:background .15s;text-align:left;direction:ltr}
 #sug li:hover,#sug li:focus{background:rgba(255,255,255,.12)}
 #sug li:last-child{border:0}
-#sug li .r-name{font-size:15px;font-weight:600;line-height:1.4}
+#sug li .r-name{font-size:15px;font-weight:600;line-height:1.6;unicode-bidi:plaintext}#sug li .r-alt{font-size:13px;font-weight:500;opacity:.78}
 #sug li .r-sub{font-size:12px;opacity:.7;line-height:1.4}
 #sug li.empty{cursor:default;text-align:center;direction:rtl;opacity:.7;padding:18px;justify-content:center;align-items:center}
 #sug li.empty:hover{background:transparent}
@@ -149,7 +149,7 @@ footer b{font-weight:600;opacity:1}
   <form class="search" id="f">
     <div class="status-dot" id="statusDot" title="آنلاین"></div>
     <span>🔍</span>
-    <input id="q" type="search" lang="en" dir="ltr" inputmode="search" spellcheck="false" maxlength="80" placeholder="جستجوی شهر" autocomplete="off" aria-label="جستجوی شهر">
+    <input id="q" type="search" lang="auto" dir="auto" inputmode="search" spellcheck="false" maxlength="80" placeholder="جستجوی شهر" autocomplete="off" aria-label="جستجوی شهر">
     <button type="button" id="loc" aria-label="موقعیت من">📍</button>
     <button type="button" id="bell" aria-label="اعلان بارش" title="فعال‌سازی اعلان بارش">🔔</button>
     <button type="button" id="install" aria-label="نصب اپ" title="نصب" hidden>⬇️</button>
@@ -328,8 +328,8 @@ const API = (lat, lon) =>
   `&timezone=auto&forecast_days=7`;
 const AQI_API = (lat, lon) =>
   `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=auto`;
-const GEO_API = v =>
-  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=30&language=en&format=json`;
+const GEO_API = (v, lang) =>
+  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=50&language=${lang}&format=json`;
 
 const get = async u => {
   const controller = new AbortController();
@@ -850,35 +850,51 @@ async function load(lat, lon, name, region){
   }
 }
 
-/* ============ English global city search ============ */
+/* ============ Bilingual global city search (English + Persian) ============ */
 let searchTimer, searchAbort, searchSequence = 0;
 const searchCache = new Map();
 const escapeSearchText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
 }[ch]));
 const normalizeCityQuery = value => String(value || '')
-  .normalize('NFKC')
-  .replace(/[\u0000-\u001f\u007f]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, 80);
+  .normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, ' ')
+  .replace(/\s+/g, ' ').trim().slice(0, 80);
+const hasPersianLetters = value => /[\u0600-\u06ff]/.test(value);
+const cityKey = city => city.id != null ? 'id:' + city.id :
+  'geo:' + Number(city.latitude).toFixed(3) + ',' + Number(city.longitude).toFixed(3);
 
 async function searchCities(query, signal) {
-  const key = query.toLocaleLowerCase('en');
+  const key = query.toLocaleLowerCase('fa');
   if (searchCache.has(key)) return searchCache.get(key);
-  const response = await fetch(GEO_API(query), { signal });
-  if (!response.ok) throw new Error('Geocoding HTTP ' + response.status);
-  const payload = await response.json();
-  const unique = new Map();
-  for (const city of (Array.isArray(payload.results) ? payload.results : [])) {
-    if (!Number.isFinite(city.latitude) || !Number.isFinite(city.longitude) || !city.name) continue;
-    const id = city.id ?? (city.latitude.toFixed(3) + ',' + city.longitude.toFixed(3));
-    if (!unique.has(id)) unique.set(id, city);
+  const responses = await Promise.allSettled(['en', 'fa'].map(async lang => {
+    const response = await fetch(GEO_API(query, lang), { signal });
+    if (!response.ok) throw new Error('Geocoding HTTP ' + response.status);
+    const payload = await response.json();
+    return { lang, cities: Array.isArray(payload.results) ? payload.results : [] };
+  }));
+  const merged = new Map();
+  let successfulSources = 0;
+  for (const response of responses) {
+    if (response.status !== 'fulfilled') continue;
+    successfulSources++;
+    for (const city of response.value.cities) {
+      if (!Number.isFinite(city.latitude) || !Number.isFinite(city.longitude) || !city.name) continue;
+      const id = cityKey(city);
+      const item = merged.get(id) || {
+        id: city.id, latitude: city.latitude, longitude: city.longitude,
+        population: Number(city.population) || 0, names: {}, regions: {}, countries: {}
+      };
+      const lang = response.value.lang;
+      item.names[lang] = city.name;
+      if (city.admin1) item.regions[lang] = city.admin1;
+      if (city.country) item.countries[lang] = city.country;
+      item.population = Math.max(item.population, Number(city.population) || 0);
+      merged.set(id, item);
+    }
   }
-  const results = [...unique.values()].sort((a, b) =>
-    (Number(b.population) || 0) - (Number(a.population) || 0)
-  ).slice(0, 20);
-  if (searchCache.size >= 60) searchCache.delete(searchCache.keys().next().value);
+  if (!successfulSources) throw new Error('Both geocoding languages failed');
+  const results = [...merged.values()].sort((a,b) => b.population-a.population).slice(0,50);
+  if (searchCache.size >= 80) searchCache.delete(searchCache.keys().next().value);
   searchCache.set(key, results);
   return results;
 }
@@ -890,38 +906,43 @@ $('q').addEventListener('input', e => {
   if (searchAbort) searchAbort.abort();
   const list = $('sug');
   if (query.length < 2) { list.hidden = true; list.innerHTML = ''; return; }
-  list.innerHTML = '<li class="empty">در حال جستجو…</li>';
+  list.innerHTML = '<li class="empty">در حال جستجو به فارسی و انگلیسی…</li>';
   list.hidden = false;
   searchTimer = setTimeout(async () => {
     const controller = new AbortController();
     searchAbort = controller;
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const results = await searchCities(query, controller.signal);
       if (sequence !== searchSequence) return;
       if (!results.length) {
-        list.innerHTML = '<li class="empty">نتیجه‌ای یافت نشد</li>';
+        list.innerHTML = '<li class="empty">شهری پیدا نشد؛ نام شهر را فارسی یا انگلیسی وارد کنید</li>';
         return;
       }
+      const faFirst = hasPersianLetters(query);
       list.innerHTML = results.map(city => {
-        const name = escapeSearchText(city.name);
-        const region = escapeSearchText([city.admin1, city.country].filter(Boolean).join(' · '));
-        return '<li data-a="' + city.latitude + '" data-o="' + city.longitude + '" data-n="' + name + '" data-r="' + region + '">' +
-          '<span class="r-name">' + name + '</span>' +
-          (region ? '<span class="r-sub">' + region + '</span>' : '') +
-          '</li>';
+        const main = city.names[faFirst ? 'fa' : 'en'] || city.names[faFirst ? 'en' : 'fa'] || '';
+        const alt = city.names[faFirst ? 'en' : 'fa'] || '';
+        const regionFa = [city.regions.fa, city.countries.fa].filter(Boolean).join(' · ');
+        const regionEn = [city.regions.en, city.countries.en].filter(Boolean).join(' · ');
+        const region = regionFa || regionEn;
+        const nameHtml = escapeSearchText(main);
+        const altHtml = alt && alt !== main ? escapeSearchText(alt) : '';
+        const regionHtml = escapeSearchText(region);
+        const altRegion = regionFa && regionEn && regionFa !== regionEn ? ' · ' + escapeSearchText(regionEn) : '';
+        const selectedName = escapeSearchText(city.names.fa || city.names.en || main);
+        const selectedRegion = escapeSearchText(regionFa || regionEn);
+        return '<li role="option" tabindex="0" data-a="' + city.latitude + '" data-o="' + city.longitude + '" data-n="' + selectedName + '" data-r="' + selectedRegion + '">' +
+          '<span class="r-name">' + nameHtml + (altHtml ? ' <span class="r-alt">· ' + altHtml + '</span>' : '') + '</span>' +
+          (regionHtml ? '<span class="r-sub">' + regionHtml + altRegion + '</span>' : '') + '</li>';
       }).join('');
     } catch (error) {
       if (sequence !== searchSequence) return;
-      if (error.name !== 'AbortError') {
-        list.innerHTML = '<li class="empty">خطا در جستجو — اتصال را بررسی کنید</li>';
-      } else if (controller.signal.aborted) {
-        list.innerHTML = '<li class="empty">مهلت جستجو تمام شد؛ دوباره تلاش کنید</li>';
-      }
-    } finally {
-      clearTimeout(timeout);
-    }
-  }, 400);
+      list.innerHTML = error.name === 'AbortError'
+        ? '<li class="empty">جستجو بیش از حد طول کشید؛ دوباره تلاش کنید</li>'
+        : '<li class="empty">خطا در جستجو — اتصال اینترنت را بررسی کنید</li>';
+    } finally { clearTimeout(timeout); }
+  }, 300);
 });
 $('sug').addEventListener('click', e => {
   const li = e.target.closest('li[data-a]');
