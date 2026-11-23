@@ -28,7 +28,7 @@ function makeElement() {
   };
 }
 
-const elements = { q: makeElement(), sug: makeElement(), searchArea: makeElement() };
+const elements = { q: makeElement(), sug: makeElement(), searchArea: makeElement(), f: makeElement() };
 elements.searchArea.contains = () => true;
 const calls = [];
 const requestUrls = [];
