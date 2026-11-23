@@ -39,6 +39,7 @@ jobs:
         run: |
           npm run build:core
           npm run test:core
+          npm run test:city-search
 
       - name: Extract Android project
         run: |
