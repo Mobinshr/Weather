@@ -1,11 +1,13 @@
 {
   "name": "qandil-weather",
   "private": true,
-  "version": "3.4.7",
+  "version": "3.4.8",
   "description": "Typed weather domain core and build tooling for the Qandil Android weather app",
   "scripts": {
     "build:core": "tsc --strict --target ES2020 --module none --outFile dist/weather-core.js src/core/weather-core.ts",
-    "test:core": "node tests/weather-core.test.cjs dist/weather-core.js"
+    "test:core": "node tests/weather-core.test.cjs dist/weather-core.js",
+    "test:city-search": "node tests/city-search.test.cjs",
+    "test": "npm run test:core && npm run test:city-search"
   },
   "devDependencies": {
     "typescript": "5.8.3"

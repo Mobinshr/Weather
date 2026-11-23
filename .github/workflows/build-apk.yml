@@ -1,4 +1,4 @@
-name: Build Qandil Weather APK v3.4.7
+name: Build Qandil Weather APK v3.4.8
 on:
   push:
     branches:
@@ -411,12 +411,12 @@ jobs:
           if gradle_file is None:
               raise SystemExit("App module Gradle file not found")
           content = gradle_file.read_text()
-          content, code_count = re.subn(r"(?m)(\bversionCode\s*(?:=\s*)?)\d+", r'\g<1>27', content, count=1)
-          content, name_count = re.subn(r"""(?m)(\bversionName\s*(?:=\s*)?)["'][^"']*["']""", r'\g<1>"3.4.7"', content, count=1)
+          content, code_count = re.subn(r"(?m)(\bversionCode\s*(?:=\s*)?)\d+", r'\g<1>28', content, count=1)
+          content, name_count = re.subn(r"""(?m)(\bversionName\s*(?:=\s*)?)["'][^"']*["']""", r'\g<1>"3.4.8"', content, count=1)
           if code_count != 1 or name_count != 1:
               raise SystemExit(f"Could not safely update version fields in {gradle_file}")
           gradle_file.write_text(content)
-          print(f"Configured {gradle_file}: versionCode=27, versionName=3.4.7")
+          print(f"Configured {gradle_file}: versionCode=28, versionName=3.4.8")
           PY
 
       - name: Configure permanent release signing

@@ -342,7 +342,7 @@ const API = (lat, lon) =>
 const AQI_API = (lat, lon) =>
   `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=auto`;
 const GEO_API = (v, lang) =>
-  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=50&language=${lang}&format=json`;
+  `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=100&language=${lang}&format=json`;
 
 const get = async u => {
   const controller = new AbortController();
@@ -903,31 +903,55 @@ async function requestCityResults(query, language, signal) {
   return Array.isArray(data.results) ? data.results : [];
 }
 async function searchCities(query, signal) {
-  const cacheKey = query.toLocaleLowerCase('fa');
+  const normalizedQuery = normalizeCityQuery(query);
+  const cacheKey = normalizedQuery.toLocaleLowerCase('fa');
   if (searchCache.has(cacheKey)) return searchCache.get(cacheKey);
 
-  const preferred = queryIsPersian(query) ? 'fa' : 'en';
-  const secondary = preferred === 'fa' ? 'en' : 'fa';
-  const first = await requestCityResults(query, preferred, signal);
-  let second = [];
-  // Try the alternate index as a fallback when the first language has no matches.
-  if (!first.length) second = await requestCityResults(query, secondary, signal);
+  // Query both language indexes on every search. One index can fail or omit
+  // translations while the other still has useful matches.
+  const languages = queryIsPersian(normalizedQuery) ? ['fa', 'en'] : ['en', 'fa'];
+  const responses = await Promise.allSettled(
+    languages.map(language => requestCityResults(normalizedQuery, language, signal))
+  );
+  const successful = responses.filter(result => result.status === 'fulfilled');
+  if (!successful.length) {
+    const failure = responses.find(result => result.status === 'rejected');
+    if (failure && failure.reason) throw failure.reason;
+    throw new Error('City search failed');
+  }
 
   const merged = new Map();
-  for (const city of [...first, ...second]) {
-    if (!city || !city.name || !Number.isFinite(city.latitude) || !Number.isFinite(city.longitude)) continue;
-    const id = cityIdentity(city);
-    if (!merged.has(id)) merged.set(id, {
-      id: city.id,
-      latitude: city.latitude,
-      longitude: city.longitude,
-      name: city.name,
-      country: city.country || '',
-      admin1: city.admin1 || '',
-      population: Number(city.population) || 0,
-      feature_code: city.feature_code || ''
-    });
-  }
+  responses.forEach(response => {
+    if (response.status !== 'fulfilled') return;
+    for (const city of response.value) {
+      if (!city || !city.name || !Number.isFinite(city.latitude) || !Number.isFinite(city.longitude)) continue;
+      const id = cityIdentity(city);
+      const name = String(city.name).trim();
+      if (!name) continue;
+      const existing = merged.get(id);
+      if (!existing) {
+        merged.set(id, {
+          id: city.id,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          name,
+          alternateNames: [],
+          country: city.country || '',
+          admin1: city.admin1 || '',
+          population: Number(city.population) || 0,
+          feature_code: city.feature_code || ''
+        });
+      } else {
+        if (name !== existing.name && !existing.alternateNames.includes(name)) {
+          existing.alternateNames.push(name);
+        }
+        if (!existing.country && city.country) existing.country = city.country;
+        if (!existing.admin1 && city.admin1) existing.admin1 = city.admin1;
+        existing.population = Math.max(existing.population, Number(city.population) || 0);
+      }
+    }
+  });
+
   const results = [...merged.values()]
     .sort((a,b) => b.population - a.population)
     .slice(0,100);
@@ -946,10 +970,14 @@ function renderCityResults(results, query) {
     const name = escapeSearchText(city.name);
     const details = escapeSearchText([city.admin1, city.country].filter(Boolean).join('، '));
     const population = city.population ? ' · جمعیت ' + escapeSearchText(fa(city.population)) : '';
+    const alternateName = (city.alternateNames || []).find(value => value && value !== city.name);
+    const alternate = alternateName
+      ? '<span class="r-alt">' + escapeSearchText(alternateName) + '</span>'
+      : '';
     return '<li role="option" aria-selected="false" tabindex="-1" data-index="' + index +
       '" data-a="' + city.latitude + '" data-o="' + city.longitude +
       '" data-n="' + name + '" data-r="' + details + '" dir="' + direction + '">' +
-      '<span class="r-name">' + name + '</span>' +
+      '<span class="r-name">' + name + '</span>' + alternate +
       (details || city.population ? '<span class="r-sub">' + details + population + '</span>' : '') +
       '</li>';
   }).join('');

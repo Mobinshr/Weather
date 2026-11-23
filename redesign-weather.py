@@ -13,6 +13,8 @@ required = [
     'search-area{position:relative',
     '#sug[hidden]{display:none!important}',
     'count=100',
+    'Promise.allSettled',
+    'alternateNames',
     'dir="auto"',
     'navigator.geolocation.getCurrentPosition',
     'https://api.open-meteo.com/v1/forecast',
