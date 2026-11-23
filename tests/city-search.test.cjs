@@ -4,10 +4,16 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'weather-ios.html'), 'utf8');
+const geoStart = html.indexOf('const GEO_API = (v, lang) =>');
+const geoBodyStart = html.indexOf('const get = async u =>', geoStart);
+const geoEnd = html.lastIndexOf(';', geoBodyStart) + 1;
 const start = html.indexOf('let searchTimer = null;');
 const end = html.indexOf('async function useQandilCoordinates', start);
+assert.ok(geoStart >= 0 && geoEnd > geoStart, 'real geocoding API definition must exist');
 assert.ok(start >= 0 && end > start, 'city search block must exist in weather-ios.html');
+const geoApiDeclaration = html.slice(geoStart, geoEnd);
 const searchBlock = html.slice(start, end);
+assert.match(geoApiDeclaration, /count=100/, 'actual API must request up to 100 matches');
 
 function makeElement() {
   return {
@@ -25,6 +31,7 @@ function makeElement() {
 const elements = { q: makeElement(), sug: makeElement(), searchArea: makeElement() };
 elements.searchArea.contains = () => true;
 const calls = [];
+const requestUrls = [];
 const failedLanguages = new Set();
 const fixtureResults = {
   en: [
@@ -51,24 +58,24 @@ const sandbox = {
     const parsed = new URL(url);
     const language = parsed.searchParams.get('language');
     calls.push(language);
+    requestUrls.push(parsed);
     if (failedLanguages.has(language)) throw new Error('simulated ' + language + ' index failure');
-    return {
-      ok: true,
-      json: async () => ({ results: fixtureResults[language] || [] })
-    };
+    const results = parsed.searchParams.get('name') === 'تهران'
+      ? [{ id: 200, name: 'Tehran', latitude: 35.6892, longitude: 51.3890, country: 'Iran', population: 9000000 }]
+      : (fixtureResults[language] || []);
+    return { ok: true, json: async () => ({ results }) };
   }
 };
 
-const apiPrelude =
-  "const GEO_API = (v, lang) => 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(v) + '&count=100&language=' + lang + '&format=json';";
 vm.createContext(sandbox);
-vm.runInContext(apiPrelude + '\n' + searchBlock +
+vm.runInContext(geoApiDeclaration + '\n' + searchBlock +
   '\nglobalThis.citySearchTestApi = { searchCities, renderCityResults, selectSearchResult };', sandbox);
 
 (async () => {
   const results = await sandbox.citySearchTestApi.searchCities('Paris', new AbortController().signal);
   const plain = JSON.parse(JSON.stringify(results));
   assert.deepEqual(new Set(calls), new Set(['en', 'fa']), 'both language indexes must be queried');
+  assert.ok(requestUrls.every(url => url.searchParams.get('count') === '100'), 'both requests must use the actual 100-result limit');
   assert.equal(plain.length, 3, 'different cities from both languages must be merged');
   assert.ok(plain[0].alternateNames.includes('پاریس'), 'translated name must be retained as an alternate label');
 
@@ -89,7 +96,8 @@ vm.runInContext(apiPrelude + '\n' + searchBlock +
   const partial = JSON.parse(JSON.stringify(
     await sandbox.citySearchTestApi.searchCities('تهران', new AbortController().signal)
   ));
-  assert.equal(partial.length, 2, 'one language failure must not hide successful results from the other');
+  assert.equal(partial.length, 1, 'one language failure must not hide successful results from the other');
+  assert.equal(partial[0].name, 'Tehran');
 
   failedLanguages.add('en');
   await assert.rejects(

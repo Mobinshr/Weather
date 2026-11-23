@@ -895,7 +895,7 @@ function showSearchMessage(message) {
   setSearchDropdown(true);
 }
 async function requestCityResults(query, language, signal) {
-  const url = GEO_API(query, language).replace('count=50', 'count=100');
+  const url = GEO_API(query, language);
   const response = await fetch(url, { signal, cache: 'no-store' });
   if (!response.ok) throw new Error('Geocoding HTTP ' + response.status);
   const data = await response.json();
