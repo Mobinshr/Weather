@@ -1,15 +1,17 @@
-# Qandil native migration
+# Qandil Native migration
 
-A clean Android application project is introduced in `native-android/` using Kotlin and Jetpack Compose. The former HTML/CSS/TypeScript + WebView implementation remains intact on this branch as a feature reference and rollback path.
+## Native classic-layout restoration — v3.6.1
+The Android UI remains fully native (Kotlin + Jetpack Compose). The previous Qandil HTML screen was used as the visual and feature reference; its layout and weather details have been rebuilt using native components.
 
-## Native milestone 1
-- Native Compose weather dashboard.
-- Open-Meteo current conditions, hourly and seven-day forecasts, air-quality indicator and global city search.
-- Persian/English city search, GPS via Android LocationManager, and persistent selected city.
-- Local cache with a 15-minute freshness window, 24-hour expiry and a 12-city limit.
-- Native Android rain notifications while the app is active.
+Restored sections:
+- Compact search toolbar with online state, GPS, rain-alert toggle and refresh.
+- Dynamic day/night and weather-condition sky gradients.
+- Centered city/temperature hero.
+- 24-hour temperature and precipitation charts.
+- 24-hour hourly forecast and seven-day temperature-range rows.
+- UV, sunset/sunrise, wind, feels-like, humidity, daily precipitation, air quality and pressure cards.
+- Rain banner and native notifications, update countdown, cache/offline status.
 
-## Not yet migrated
-- Scheduled/background rain alerts, full multilingual UI and the full set of original chart/translation details remain follow-up work.
-- The current package ID is set to `com.example.weather`, matching the Kotlin source package used by the existing Android project; verify install-over behavior against the current release before replacing it.
-- Preview builds are signed with the existing release keystore and uploaded as artifacts only. No release is published from this branch.
+The native data layer now retrieves and caches `is_day`, current local time, sunrise, sunset, daily UV and daily precipitation probability. A new cache namespace prevents 3.6.0 snapshots from masking the restored fields.
+
+The HTML source remains in the repository as a historical reference; it is not used to render the Native application screen.
