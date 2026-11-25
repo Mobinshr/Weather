@@ -36,7 +36,11 @@ const valid = {
 assert.equal(cache.isUsableWeatherData(valid), true);
 assert.equal(cache.isUsableWeatherData({ current:{}, hourly:{}, daily:{} }), false);
 const now = Date.now();
+storage.setItem('ios_weather_last_city', JSON.stringify({ name:'پیرانشهر', lat:36.7, lon:45.1 }));
+storage.setItem('ios_weather_notif_enabled', '1');
 assert.equal(cache.saveCache(36,45,valid,20,now), true);
+assert.ok(storage.getItem('ios_weather_last_city'), 'cache pruning must preserve the saved city');
+assert.equal(storage.getItem('ios_weather_notif_enabled'), '1', 'cache pruning must preserve notification preferences');
 assert.equal(cache.loadCache(36,45).aqi, 20);
 assert.equal(cache.loadCache(36,45).at, now);
 const expiredKey = cache.cacheKeyFor(35,45);

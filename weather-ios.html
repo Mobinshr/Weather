@@ -488,7 +488,7 @@ function pruneWeatherCache(){
     const entries = [];
     for (let i = localStorage.length - 1; i >= 0; i -= 1){
       const key = localStorage.key(i);
-      if (!key || !key.startsWith(CACHE_PREFIX)) continue;
+      if (!key || !key.startsWith(CACHE_PREFIX) || key === LAST_CITY_KEY || key === NOTIF_KEY) continue;
       try {
         const value = JSON.parse(localStorage.getItem(key) || 'null');
         const age = value && Number.isFinite(value.at) ? now - value.at : Infinity;
