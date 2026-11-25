@@ -37,6 +37,24 @@ jobs:
           test -n "$ANDROID_KEYSTORE_BASE64"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mobin-apps-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/mobin-apps-release.jks" >> "$GITHUB_ENV"
+      - name: Verify existing Android package identity
+        run: |
+          set -euo pipefail
+          unzip -q -o PiranshahrWeather-GitHub.zip -d "$RUNNER_TEMP/legacy-weather"
+          GRADLE_FILE="$(find "$RUNNER_TEMP/legacy-weather/piranshahr-weather-android/app" -maxdepth 1 -type f \\( -name 'build.gradle.kts' -o -name 'build.gradle' \\) | head -n1)"
+          test -n "$GRADLE_FILE"
+          LEGACY_APP_ID="$(python3 - "$GRADLE_FILE" <<'PY'
+          import pathlib, re, sys
+          text = pathlib.Path(sys.argv[1]).read_text()
+          match = re.search(r'applicationId\\s*(?:=\\s*)?["\\']([^"\\']+)["\\']', text)
+          if not match:
+              raise SystemExit("Could not read existing app applicationId")
+          print(match.group(1))
+          PY
+          )"
+          echo "Existing release applicationId: $LEGACY_APP_ID"
+          test "$LEGACY_APP_ID" = "com.example.weather"
+          echo "Native app package matches the existing Weather release."
       - name: Build native Qandil APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
