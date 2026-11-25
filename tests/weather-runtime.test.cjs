@@ -49,7 +49,7 @@ storage.setItem(expiredKey, JSON.stringify({ data:valid, aqi:null, at:now - 25*6
 assert.equal(cache.loadCache(35,45), null);
 assert.equal(storage.getItem(expiredKey), null);
 for (let i=0;i<16;i++) cache.saveCache(10+i,40,valid,null,now+i);
-const weatherKeys = [...values.keys()].filter(key => key.startsWith('ios_weather_'));
+const weatherKeys = [...values.keys()].filter(key => /^ios_weather_-?\\d+\\.\\d{4}_-?\\d+\\.\\d{4}$/.test(key));
 assert.ok(weatherKeys.length <= 12, 'cache should retain no more than 12 cities');
 
 const loadStart = html.indexOf('async function load(lat, lon, name, region, options = {})');
