@@ -26,3 +26,13 @@ if missing:
     raise SystemExit("Replacement HTML is incomplete: " + ", ".join(missing))
 target.write_text(page, encoding="utf-8")
 print(f"Installed the supplied weather interface: {target} ({len(page)} characters)")
+
+
+# Install the exact user-supplied Qandil launcher artwork.
+icon_source = Path(__file__).with_name("qandil_icon.webp")
+icon_target = Path("app/src/main/res/drawable-nodpi/ic_launcher_asset.webp")
+if not icon_source.is_file():
+    raise SystemExit("The supplied Qandil launcher icon qandil_icon.webp is missing.")
+icon_target.parent.mkdir(parents=True, exist_ok=True)
+icon_target.write_bytes(icon_source.read_bytes())
+print(f"Installed supplied Qandil launcher artwork: {icon_target}")

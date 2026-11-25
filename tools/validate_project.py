@@ -6,7 +6,8 @@ activity_path = root / "app/src/main/java/com/example/weather/MainActivity.kt"
 html_path = root / "app/src/main/assets/weather.html"
 gradle_path = root / "app/build.gradle.kts"
 icon_path = root / "app/src/main/res/drawable/ic_launcher.xml"
-required = [manifest_path, activity_path, html_path, gradle_path, icon_path]
+icon_image_path = root / "app/src/main/res/drawable-nodpi/ic_launcher_asset.webp"
+required = [manifest_path, activity_path, html_path, gradle_path, icon_path, icon_image_path]
 missing = [str(p.relative_to(root)) for p in required if not p.is_file()]
 if missing:
     raise SystemExit("Required Android project files are missing: " + ", ".join(missing))
@@ -32,7 +33,7 @@ checks = {
     "Android internet permission is retained": "android.permission.INTERNET" in manifest,
     "Android location permission is declared": "android.permission.ACCESS_FINE_LOCATION" in manifest or "android.permission.ACCESS_COARSE_LOCATION" in manifest,
     "Android notification permission is declared": "android.permission.POST_NOTIFICATIONS" in manifest,
-    "Qandil launcher icon is installed": 'android:icon="@drawable/ic_launcher"' in manifest,
+    "Qandil launcher icon is installed": 'android:icon="@drawable/ic_launcher"' in manifest and icon_image_path.stat().st_size > 0,
     "existing Android application ID is retained": 'applicationId = "com.example.weather"' in gradle,
 }
 for label, passed in checks.items():
