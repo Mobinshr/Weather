@@ -94,6 +94,12 @@ private const val RAIN_WINDOW_HOURS = 6
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!showCrashReportIfAvailable { showWeatherContent() }) {
+            showWeatherContent()
+        }
+    }
+
+    private fun showWeatherContent() {
         setContent { MaterialTheme { QandilWeatherApp() } }
     }
 }
