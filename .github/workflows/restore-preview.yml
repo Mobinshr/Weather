@@ -2,7 +2,7 @@ name: Qandil classic-layout Native preview
 
 on:
   push:
-    branches: [restore-qandil-ui, diagnostic-v3.6.2]
+    branches: [restore-qandil-ui]
     paths:
       - 'native-android/**'
       - '.github/workflows/restore-preview.yml'
@@ -49,10 +49,10 @@ jobs:
           APK="native-android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='34' versionName='3.6.2'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='33' versionName='3.6.1'"
       - uses: actions/upload-artifact@v4
         with:
-          name: Qandil-Diagnostic-Native-Preview
+          name: Qandil-Classic-Layout-Native-Preview
           path: native-android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
