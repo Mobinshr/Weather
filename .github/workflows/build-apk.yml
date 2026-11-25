@@ -99,7 +99,7 @@ jobs:
           echo "$VERIFY_OUTPUT"
           grep -F "Verified using v1 scheme (JAR signing): true" <<< "$VERIFY_OUTPUT"
           grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='37' versionName='3.6.5'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='38' versionName='3.6.6'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -111,10 +111,10 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.5
-          name: Qandil Weather v3.6.5 (Native · legacy V1 + V2 signatures)
+          tag_name: v3.6.6
+          name: Qandil Weather v3.6.6 (Native · legacy V1 + V2 signatures)
           body: |
-            ## آب‌وهوای قندیل 3.6.5
+            ## آب‌وهوای قندیل 3.6.6
 
             نسخهٔ عیب‌یابی قندیل با سازگاری بیشتر برای نصب‌کننده‌های اندرویدی.
 
