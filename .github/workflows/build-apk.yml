@@ -82,7 +82,7 @@ jobs:
             --ks-key-alias "$ANDROID_KEY_ALIAS" \
             --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
             --key-pass env:ANDROID_KEY_PASSWORD \
-            --min-sdk-version 24 \
+            --min-sdk-version 23 \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
@@ -95,11 +95,11 @@ jobs:
           set -euo pipefail
           APK="native-android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
-          VERIFY_OUTPUT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" 2>&1)"
+          VERIFY_OUTPUT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs --min-sdk-version 23 "$APK" 2>&1)"
           echo "$VERIFY_OUTPUT"
           grep -F "Verified using v1 scheme (JAR signing): true" <<< "$VERIFY_OUTPUT"
           grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='36' versionName='3.6.4'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='37' versionName='3.6.5'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -111,15 +111,15 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.4
-          name: Qandil Weather v3.6.4 (Native · dual-signature compatibility fix)
+          tag_name: v3.6.5
+          name: Qandil Weather v3.6.5 (Native · legacy V1 + V2 signatures)
           body: |
-            ## آب‌وهوای قندیل 3.6.4
+            ## آب‌وهوای قندیل 3.6.5
 
             نسخهٔ عیب‌یابی قندیل با سازگاری بیشتر برای نصب‌کننده‌های اندرویدی.
 
             - Package: com.example.weather
-            - Version code: 36
+            - Version code: 37
             - Kotlin + Jetpack Compose
             - APK پس از ساخت با apksigner دوباره با امضای V1 و V2 امضا و هر دو امضا به‌صورت اجباری بررسی می‌شوند.
             - ثبت خطاهای بسته‌شدن ناگهانی و نمایش گزارش قابل کپی در اجرای بعدی
