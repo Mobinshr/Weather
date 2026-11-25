@@ -41,20 +41,31 @@ jobs:
         run: |
           set -euo pipefail
           unzip -q -o PiranshahrWeather-GitHub.zip -d "$RUNNER_TEMP/legacy-weather"
-          GRADLE_FILE="$(find "$RUNNER_TEMP/legacy-weather/piranshahr-weather-android/app" -maxdepth 1 -type f \\( -name 'build.gradle.kts' -o -name 'build.gradle' \\) | head -n1)"
-          test -n "$GRADLE_FILE"
-          LEGACY_APP_ID="$(python3 - "$GRADLE_FILE" <<'PY'
-          import pathlib, re, sys
-          text = pathlib.Path(sys.argv[1]).read_text()
-          match = re.search(r'applicationId\\s*(?:=\\s*)?["\\']([^"\\']+)["\\']', text)
-          if not match:
+          python3 - "$RUNNER_TEMP/legacy-weather/piranshahr-weather-android/app" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          app_dir = pathlib.Path(sys.argv[1])
+          candidates = [app_dir / "build.gradle.kts", app_dir / "build.gradle"]
+          gradle_file = next((path for path in candidates if path.is_file()), None)
+          if gradle_file is None:
+              raise SystemExit("Existing Android app Gradle file was not found")
+
+          source = gradle_file.read_text(encoding="utf-8")
+          match = re.search(r"""applicationId\s*(?:=\s*)?["']([^"']+)["']""", source)
+          if match is None:
               raise SystemExit("Could not read existing app applicationId")
-          print(match.group(1))
+
+          legacy_id = match.group(1)
+          expected_id = "com.example.weather"
+          print(f"Existing release applicationId: {legacy_id}")
+          if legacy_id != expected_id:
+              raise SystemExit(
+                  f"Native app ID mismatch: legacy={legacy_id}, native={expected_id}"
+              )
+          print("Native app package matches the existing Weather release.")
           PY
-          )"
-          echo "Existing release applicationId: $LEGACY_APP_ID"
-          test "$LEGACY_APP_ID" = "com.example.weather"
-          echo "Native app package matches the existing Weather release."
       - name: Build native Qandil APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
