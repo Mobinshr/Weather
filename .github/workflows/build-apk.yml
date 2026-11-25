@@ -95,7 +95,7 @@ jobs:
             رابط Native با بازگردانی چیدمان و امکانات نسخهٔ قبلی قندیل.
 
             - Package: com.example.weather
-            - Version code: 33
+            - Version code: 34
             - Kotlin + Jetpack Compose
             - ثبت خطاهای بسته‌شدن ناگهانی و نمایش گزارش قابل کپی در اجرای بعدی
             - دو نمودار دمایی و احتمال بارش ۲۴ ساعت آینده
