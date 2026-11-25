@@ -69,13 +69,16 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle -p native-android :app:assembleRelease
 
-      - name: Verify APK identity and signature
+      - name: Verify APK identity and both signing schemes
         run: |
           set -euo pipefail
           APK="native-android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='34' versionName='3.6.2'"
+          VERIFY_OUTPUT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" 2>&1)"
+          echo "$VERIFY_OUTPUT"
+          grep -F "Verified using v1 scheme (JAR signing): true" <<< "$VERIFY_OUTPUT"
+          grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='35' versionName='3.6.3'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -87,21 +90,19 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.2
-          name: Qandil Weather v3.6.2 (Native · Classic layout + crash diagnostics)
+          tag_name: v3.6.3
+          name: Qandil Weather v3.6.3 (Native · dual-signature compatibility fix)
           body: |
-            ## آب‌وهوای قندیل 3.6.2
+            ## آب‌وهوای قندیل 3.6.3
 
-            رابط Native با بازگردانی چیدمان و امکانات نسخهٔ قبلی قندیل.
+            نسخهٔ عیب‌یابی قندیل با سازگاری بیشتر برای نصب‌کننده‌های اندرویدی.
 
             - Package: com.example.weather
-            - Version code: 34
+            - Version code: 35
             - Kotlin + Jetpack Compose
+            - امضای V1 و V2 هر دو فعال و هنگام ساخت بررسی می‌شوند.
             - ثبت خطاهای بسته‌شدن ناگهانی و نمایش گزارش قابل کپی در اجرای بعدی
-            - دو نمودار دمایی و احتمال بارش ۲۴ ساعت آینده
-            - پیش‌بینی ساعتی و هفت‌روزه، کارت‌های UV، طلوع/غروب، باد، حس واقعی، رطوبت، بارش، کیفیت هوا و فشار
-            - پس‌زمینهٔ پویا بر اساس هوا و شب/روز
-            - کش محلی، تازه‌سازی خودکار و هشدار بارش
+            - طراحی کلاسیک، پیش‌بینی‌ها، نمودارها و هشدار بارش
           files: native-android/app/build/outputs/apk/release/app-release.apk
           make_latest: true
           fail_on_unmatched_files: true
