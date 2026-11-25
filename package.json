@@ -7,7 +7,8 @@
     "build:core": "tsc --strict --target ES2020 --module none --outFile dist/weather-core.js src/core/weather-core.ts",
     "test:core": "node tests/weather-core.test.cjs dist/weather-core.js",
     "test:city-search": "node tests/city-search.test.cjs",
-    "test": "npm run test:core && npm run test:city-search"
+    "test:runtime": "node tests/weather-runtime.test.cjs",
+    "test": "npm run test:core && npm run test:city-search && npm run test:runtime"
   },
   "devDependencies": {
     "typescript": "5.8.3"

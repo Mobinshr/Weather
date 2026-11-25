@@ -20,7 +20,7 @@ body{font-family:SysEmoji,Vazirmatn,-apple-system,system-ui,sans-serif;color:#ff
 #sug[hidden]{display:none!important}
 #sug li{display:flex;flex-direction:column;gap:3px;padding:12px 16px;min-height:52px;border-bottom:1px solid rgba(255,255,255,.10);cursor:pointer;text-align:start;direction:auto;unicode-bidi:plaintext}
 #sug li:last-child{border-bottom:0}
-#sug li[aria-selected="true"],#sug li:active{background:rgba(255,255,255,.16)}
+#sug li[aria-selected="true"],#sug li:active,#sug li:hover,#sug li:focus{background:rgba(255,255,255,.16)}
 #sug .r-name{font-size:15px;font-weight:700;line-height:1.55}
 #sug .r-alt{font-size:13px;font-weight:500;opacity:.78}
 #sug .r-sub{font-size:12px;opacity:.72;line-height:1.5}
@@ -40,15 +40,6 @@ body{font-family:SysEmoji,Vazirmatn,-apple-system,system-ui,sans-serif;color:#ff
 .status-dot.offline{background:#ef4444;box-shadow:0 0 8px #ef4444;animation:pulse-red 2s infinite}
 @keyframes pulse-green{0%{box-shadow:0 0 0 0 rgba(74,222,128,.7)}70%{box-shadow:0 0 0 6px rgba(74,222,128,0)}100%{box-shadow:0 0 0 0 rgba(74,222,128,0)}}
 @keyframes pulse-red{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7)}70%{box-shadow:0 0 0 6px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
-
-#sug{position:relative;z-index:80;width:100%;list-style:none;padding:0;margin-top:8px;background:rgba(20,30,50,.72);border-radius:14px;overflow:hidden;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);max-height:55vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-#sug li{padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px;transition:background .15s;text-align:left;direction:ltr}
-#sug li:hover,#sug li:focus{background:rgba(255,255,255,.12)}
-#sug li:last-child{border:0}
-#sug li .r-name{font-size:15px;font-weight:600;line-height:1.6;unicode-bidi:plaintext}#sug li .r-alt{font-size:13px;font-weight:500;opacity:.78}
-#sug li .r-sub{font-size:12px;opacity:.7;line-height:1.4}
-#sug li.empty{cursor:default;text-align:center;direction:rtl;opacity:.7;padding:18px;justify-content:center;align-items:center}
-#sug li.empty:hover{background:transparent}
 
 :focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:8px}
 .h i,.day .i{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",SysEmoji,sans-serif;font-variant-emoji:emoji;font-style:normal}
@@ -344,14 +335,21 @@ const AQI_API = (lat, lon) =>
 const GEO_API = (v, lang) =>
   `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=100&language=${lang}&format=json`;
 
-const get = async u => {
+const get = async (u, options = {}) => {
   const controller = new AbortController();
+  const parentSignal = options.signal;
+  const abortFromParent = () => controller.abort();
+  if (parentSignal?.aborted) controller.abort();
+  else if (parentSignal) parentSignal.addEventListener('abort', abortFromParent, { once:true });
   const timer = setTimeout(() => controller.abort(), 18000);
   try {
     const r = await fetch(u, { signal:controller.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.json();
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
+  }
 };
 
 /* ============ Constants ============ */
@@ -359,7 +357,9 @@ const REFRESH_MS = 15 * 60 * 1000;
 const CACHE_PREFIX = 'ios_weather_';
 const LAST_CITY_KEY = 'ios_weather_last_city';
 const NOTIF_KEY = 'ios_weather_notif_enabled';
-const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000;
+const CACHE_FRESH_MS = REFRESH_MS;
+const MAX_CACHE_AGE = 24 * 60 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 12;
 const RAIN_THRESHOLD = 60;
 const TODAY_RAIN_THRESHOLD = 70;
 const RAIN_WINDOW_HOURS = 6;
@@ -372,6 +372,8 @@ let lastAqi = null;
 let lastSavedAt = null;
 let offlineMode = !navigator.onLine;
 let loadingInProgress = false;
+let loadSequence = 0;
+let loadController = null;
 let notifEnabled = localStorage.getItem(NOTIF_KEY) === '1';
 let lastRainSig = null;
 let dismissedRainSig = null;
@@ -458,18 +460,77 @@ function showInPageNotification(title, body, opts={}){
 
 /* ============ Cache ============ */
 function cacheKeyFor(lat, lon){ return `${CACHE_PREFIX}${lat.toFixed(4)}_${lon.toFixed(4)}`; }
-function saveCache(lat, lon, data, aqi, at){
-  try { localStorage.setItem(cacheKeyFor(lat, lon), JSON.stringify({ data, aqi, at })); } catch(e){}
+
+function isUsableWeatherData(data){
+  if (!data || typeof data !== 'object') return false;
+  const c = data.current, h = data.hourly, d = data.daily;
+  if (!c || !h || !d) return false;
+  const finite = value => typeof value === 'number' && Number.isFinite(value);
+  if (![c.temperature_2m,c.apparent_temperature,c.relative_humidity_2m,c.weather_code,c.wind_speed_10m].every(finite)) return false;
+  const groups = [
+    [h.time,h.temperature_2m,h.weather_code],
+    [d.time,d.temperature_2m_max,d.temperature_2m_min,d.weather_code]
+  ];
+  for (const group of groups){
+    if (!group.every(Array.isArray) || !group[0].length) return false;
+    if (!group.every(values => values.length === group[0].length)) return false;
+  }
+  return h.time.every(value => typeof value === 'string' && Number.isFinite(Date.parse(value))) &&
+    d.time.every(value => typeof value === 'string' && Number.isFinite(Date.parse(value))) &&
+    h.temperature_2m.every(finite) && h.weather_code.every(finite) &&
+    d.temperature_2m_max.every(finite) && d.temperature_2m_min.every(finite) &&
+    d.weather_code.every(finite);
 }
-function loadCache(lat, lon){
+
+function pruneWeatherCache(){
   try {
-    const raw = localStorage.getItem(cacheKeyFor(lat, lon));
+    const now = Date.now();
+    const entries = [];
+    for (let i = localStorage.length - 1; i >= 0; i -= 1){
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(CACHE_PREFIX)) continue;
+      try {
+        const value = JSON.parse(localStorage.getItem(key) || 'null');
+        const age = value && Number.isFinite(value.at) ? now - value.at : Infinity;
+        if (age < 0 || age > MAX_CACHE_AGE || !isUsableWeatherData(value.data)){
+          localStorage.removeItem(key);
+        } else {
+          entries.push({ key, at:value.at });
+        }
+      } catch(e) {
+        localStorage.removeItem(key);
+      }
+    }
+    entries.sort((a,b) => b.at - a.at);
+    entries.slice(MAX_CACHE_ENTRIES).forEach(entry => localStorage.removeItem(entry.key));
+  } catch(e){}
+}
+
+function saveCache(lat, lon, data, aqi, at){
+  if (!isUsableWeatherData(data)) return false;
+  try {
+    localStorage.setItem(cacheKeyFor(lat, lon), JSON.stringify({ data, aqi, at }));
+    pruneWeatherCache();
+    return true;
+  } catch(e){ return false; }
+}
+
+function loadCache(lat, lon){
+  const key = cacheKeyFor(lat, lon);
+  try {
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const v = JSON.parse(raw);
-    if (!v.data || !v.at) return null;
-    if (Date.now() - v.at > MAX_CACHE_AGE) { localStorage.removeItem(cacheKeyFor(lat, lon)); return null; }
-    return v;
-  } catch { return null; }
+    const value = JSON.parse(raw);
+    const age = value && Number.isFinite(value.at) ? Date.now() - value.at : Infinity;
+    if (age < 0 || age > MAX_CACHE_AGE || !isUsableWeatherData(value.data)){
+      localStorage.removeItem(key);
+      return null;
+    }
+    return { data:value.data, aqi:Number.isFinite(value.aqi) ? value.aqi : null, at:value.at };
+  } catch(e) {
+    try { localStorage.removeItem(key); } catch {}
+    return null;
+  }
 }
 
 /* ============ Notification permission & fire ============ */
@@ -577,9 +638,9 @@ function updateCountdown(){
   const m = Math.floor(diff / 60000), s = Math.floor((diff % 60000) / 1000);
   $('countdown').textContent = `${dg(m)}:${dg(String(s).padStart(2,'0'))}`;
 }
-function startCountdown(){
+function startCountdown(savedAt = Date.now()){
   if (countdownTimer) clearInterval(countdownTimer);
-  nextRefreshAt = Date.now() + REFRESH_MS;
+  nextRefreshAt = Math.max(savedAt + REFRESH_MS, Date.now());
   updateCountdown();
   countdownTimer = setInterval(updateCountdown, 1000);
 }
@@ -813,22 +874,39 @@ function formatRel(ms){
   return `${dg(Math.floor(h/24))} روز پیش`;
 }
 
-async function load(lat, lon, name, region){
-  if (loadingInProgress) return;
+async function load(lat, lon, name, region, options = {}){
+  const latitude = Number(lat), longitude = Number(lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    showToast('مختصات شهر معتبر نیست', 'error');
+    return;
+  }
+
+  const requestId = ++loadSequence;
+  if (loadController) loadController.abort();
+  const controller = new AbortController();
+  loadController = controller;
   loadingInProgress = true;
-  current = { lat, lon, name, region: region || '', key: cacheKeyFor(lat, lon) };
-  localStorage.setItem(LAST_CITY_KEY, JSON.stringify({ lat, lon, name, region: region || '' }));
+  current = { lat:latitude, lon:longitude, name:String(name || 'موقعیت انتخاب‌شده'), region:region || '', key:cacheKeyFor(latitude, longitude) };
+  try {
+    localStorage.setItem(LAST_CITY_KEY, JSON.stringify({ lat:latitude, lon:longitude, name:current.name, region:current.region }));
+  } catch(e){}
+
   const btn = $('refresh');
   btn.classList.add('spin');
   btn.disabled = true;
 
-  const cached = loadCache(lat, lon);
+  const cached = loadCache(latitude, longitude);
   if (cached){
-    lastWeather = cached.data; lastAqi = cached.aqi; lastSavedAt = cached.at;
-    render(cached.data, cached.aqi, name, cached.at, true);
-    if (Date.now() - cached.at < 60_000){
-      loadingInProgress = false;
-      btn.classList.remove('spin'); btn.disabled = false;
+    lastWeather = cached.data;
+    lastAqi = cached.aqi;
+    lastSavedAt = cached.at;
+    render(cached.data, cached.aqi, current.name, cached.at, true);
+    const cacheAge = Date.now() - cached.at;
+    if (cacheAge <= CACHE_FRESH_MS && options.force !== true){
+      offlineMode = !navigator.onLine;
+      updateStatusDot(!offlineMode);
+      startCountdown(cached.at);
       return;
     }
   } else {
@@ -836,30 +914,42 @@ async function load(lat, lon, name, region){
   }
 
   try {
-    const [wRes, aRes] = await Promise.all([
-      get(API(lat, lon)),
-      get(AQI_API(lat, lon)).catch(() => null)
+    const [weatherData, airData] = await Promise.all([
+      get(API(latitude, longitude), { signal:controller.signal }),
+      get(AQI_API(latitude, longitude), { signal:controller.signal })
+        .catch(error => controller.signal.aborted ? Promise.reject(error) : null)
     ]);
-    const aqi = aRes?.current?.european_aqi ?? null;
-    const now = Date.now();
-    lastWeather = wRes; lastAqi = aqi; lastSavedAt = now;
+    if (requestId !== loadSequence || controller.signal.aborted) return;
+    if (!isUsableWeatherData(weatherData)) throw new Error('دادهٔ دریافتی هواشناسی معتبر نیست');
+
+    const receivedAt = Date.now();
+    const aqiValue = airData?.current?.european_aqi;
+    const aqi = Number.isFinite(aqiValue) ? aqiValue : (cached?.aqi ?? null);
+    lastWeather = weatherData;
+    lastAqi = aqi;
+    lastSavedAt = receivedAt;
     offlineMode = false;
-    updateStatusDot(true); // آپدیت چراغ وضعیت
-    saveCache(lat, lon, wRes, aqi, now);
-    render(wRes, aqi, name, now, false);
-    startCountdown();
-  } catch (err){
+    updateStatusDot(true);
+    saveCache(latitude, longitude, weatherData, aqi, receivedAt);
+    render(weatherData, aqi, current.name, receivedAt, false);
+    startCountdown(receivedAt);
+  } catch (error){
+    if (requestId !== loadSequence || controller.signal.aborted) return;
     offlineMode = true;
-    updateStatusDot(false); // آپدیت چراغ وضعیت
+    updateStatusDot(false);
     if (cached){
+      startCountdown(cached.at);
       updateCountdown();
     } else {
-      showMessage('خطا در اتصال. اینترنت را بررسی کنید 📡');
+      showMessage('خطا در اتصال یا دریافت دادهٔ معتبر. اینترنت را بررسی کنید 📡');
     }
   } finally {
-    loadingInProgress = false;
-    btn.classList.remove('spin');
-    btn.disabled = false;
+    if (requestId === loadSequence){
+      loadingInProgress = false;
+      loadController = null;
+      btn.classList.remove('spin');
+      btn.disabled = false;
+    }
   }
 }
 
@@ -1111,8 +1201,7 @@ $('loc').onclick = () => {
   );
 };
 $('refresh').onclick = () => {
-  if (loadingInProgress) return;
-  load(current.lat, current.lon, current.name, current.region);
+  load(current.lat, current.lon, current.name, current.region, { force:true });
 };
 
 /* ============ Notifications toggle ============ */
@@ -1163,7 +1252,7 @@ async function doPullRefresh(){
   const p = $('pull');
   p.classList.add('refreshing', 'visible');
   $('pullText').textContent = 'در حال به‌روزرسانی…';
-  try { await load(current.lat, current.lon, current.name, current.region); }
+  try { await load(current.lat, current.lon, current.name, current.region, { force:true }); }
   finally {
     setTimeout(() => {
       p.classList.remove('visible', 'ready', 'refreshing');
@@ -1252,7 +1341,7 @@ window.addEventListener('online', () => {
   offlineMode = false;
   updateStatusDot(true);
   if (loadingInProgress) return;
-  load(current.lat, current.lon, current.name, current.region);
+  load(current.lat, current.lon, current.name, current.region, { force:true });
 });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && notifEnabled && lastWeather){
