@@ -665,10 +665,9 @@ private fun FooterInfo(status: String, online: Boolean, fetchedAt: Long, remaini
     val seconds = (remainingMs % 60_000L) / 1_000L
     val updateTime = SimpleDateFormat("HH:mm", Locale("fa", "IR")).format(Date(fetchedAt))
     Column(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("آخرین به‌روزرسانی: " + faTime(updateTime), color = Color.White.copy(alpha = .78f), fontSize = 11.sp)
-        Text("به‌روزرسانی بعدی تا " + fa(minutes.toInt()) + ":" + fa(seconds.toInt()).padStart(2, '۰'), color = Color.White.copy(alpha = .78f), fontSize = 11.sp)
-        Text(status + if (online) " · آنلاین" else " · آفلاین", color = Color.White.copy(alpha = .58f), fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
-        Text("منبع داده: Open-Meteo", color = Color.White.copy(alpha = .56f), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+        Text("منبع داده: Open-Meteo", color = Color.White.copy(alpha = .65f), fontSize = 11.sp)
+        Text("ساخته شده توسط mobin", color = Color.White.copy(alpha = .65f), fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+        Text("نسخه برنامه: " + BuildConfig.VERSION_NAME, color = Color.White.copy(alpha = .65f), fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
