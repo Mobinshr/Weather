@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'weather-ios.html'), 'utf8');
 const geoStart = html.indexOf('const GEO_API = (v, lang) =>');
-const geoBodyStart = html.indexOf('const get = async u =>', geoStart);
+const geoBodyStart = html.indexOf('const get = async', geoStart);
 const geoEnd = html.lastIndexOf(';', geoBodyStart) + 1;
 const start = html.indexOf('let searchTimer = null;');
 const end = html.indexOf('async function useQandilCoordinates', start);
