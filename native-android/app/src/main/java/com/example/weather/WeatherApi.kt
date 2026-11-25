@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 object WeatherApi {
     suspend fun fetch(city: CityPlace): WeatherSnapshot = withContext(Dispatchers.IO) {
         val forecastUrl = "https://api.open-meteo.com/v1/forecast" +
-            "?latitude=\${city.latitude}&longitude=\${city.longitude}" +
+            "?latitude=${city.latitude}&longitude=${city.longitude}" +
             "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl,is_day" +
             "&hourly=temperature_2m,precipitation_probability,weather_code" +
             "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset,precipitation_probability_max" +
@@ -29,7 +29,7 @@ object WeatherApi {
         val aqi = runCatching {
             requestJson(
                 "https://air-quality-api.open-meteo.com/v1/air-quality" +
-                    "?latitude=\${city.latitude}&longitude=\${city.longitude}&current=european_aqi&timezone=auto"
+                    "?latitude=${city.latitude}&longitude=${city.longitude}&current=european_aqi&timezone=auto"
             ).getJSONObject("current").optDouble("european_aqi").takeIf { it.isFinite() }?.roundToInt()
         }.getOrNull()
 
