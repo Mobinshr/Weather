@@ -15,19 +15,21 @@ import kotlin.math.roundToInt
 object WeatherApi {
     suspend fun fetch(city: CityPlace): WeatherSnapshot = withContext(Dispatchers.IO) {
         val forecastUrl = "https://api.open-meteo.com/v1/forecast" +
-            "?latitude=${city.latitude}&longitude=${city.longitude}" +
-            "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl" +
+            "?latitude=\${city.latitude}&longitude=\${city.longitude}" +
+            "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl,is_day" +
             "&hourly=temperature_2m,precipitation_probability,weather_code" +
-            "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max" +
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset,precipitation_probability_max" +
             "&timezone=auto&forecast_days=7"
+
         val json = requestJson(forecastUrl)
         val current = json.getJSONObject("current")
         val hourlyJson = json.getJSONObject("hourly")
         val dailyJson = json.getJSONObject("daily")
+
         val aqi = runCatching {
             requestJson(
                 "https://air-quality-api.open-meteo.com/v1/air-quality" +
-                    "?latitude=${city.latitude}&longitude=${city.longitude}&current=european_aqi&timezone=auto"
+                    "?latitude=\${city.latitude}&longitude=\${city.longitude}&current=european_aqi&timezone=auto"
             ).getJSONObject("current").optDouble("european_aqi").takeIf { it.isFinite() }?.roundToInt()
         }.getOrNull()
 
@@ -51,15 +53,22 @@ object WeatherApi {
         val dayProbabilities = dailyJson.optJSONArray("precipitation_probability_max") ?: JSONArray()
         val dayCodes = dailyJson.optJSONArray("weather_code") ?: JSONArray()
         val uv = dailyJson.optJSONArray("uv_index_max") ?: JSONArray()
-        val dailySize = minOf(dayTimes.length(), minTemps.length(), maxTemps.length(), dayCodes.length())
+        val sunrises = dailyJson.optJSONArray("sunrise") ?: JSONArray()
+        val sunsets = dailyJson.optJSONArray("sunset") ?: JSONArray()
+        val dailySize = minOf(
+            dayTimes.length(), minTemps.length(), maxTemps.length(),
+            dayProbabilities.length(), dayCodes.length(), uv.length()
+        )
         val daily = (0 until dailySize).map { index ->
             DayForecast(
-                dayTimes.optString(index),
-                minTemps.optDouble(index, 0.0),
-                maxTemps.optDouble(index, 0.0),
-                dayProbabilities.optDouble(index, 0.0).roundToInt().coerceIn(0, 100),
-                dayCodes.optInt(index),
-                uv.optDouble(index, 0.0)
+                date = dayTimes.optString(index),
+                minTemperature = minTemps.optDouble(index, 0.0),
+                maxTemperature = maxTemps.optDouble(index, 0.0),
+                rainProbability = dayProbabilities.optDouble(index, 0.0).roundToInt().coerceIn(0, 100),
+                weatherCode = dayCodes.optInt(index),
+                uvIndex = uv.optDouble(index, 0.0),
+                sunrise = sunrises.optString(index),
+                sunset = sunsets.optString(index)
             )
         }
 
@@ -71,6 +80,8 @@ object WeatherApi {
             windSpeed = current.optDouble("wind_speed_10m"),
             pressure = current.optDouble("pressure_msl"),
             weatherCode = current.optInt("weather_code"),
+            isDay = current.optInt("is_day", 1) == 1,
+            currentTime = current.optString("time"),
             airQuality = aqi,
             hourly = hourly,
             daily = daily
@@ -82,7 +93,7 @@ object WeatherApi {
     suspend fun searchCities(query: String): List<CityPlace> = withContext(Dispatchers.IO) {
         val normalized = query.trim().take(80)
         if (normalized.length < 2) return@withContext emptyList()
-        val languages = listOf("fa", "en")
+        val languages = if (normalized.any { it.code in 0x0600..0x06FF }) listOf("fa", "en") else listOf("en", "fa")
         val merged = LinkedHashMap<String, CityPlace>()
         var hadSuccess = false
         languages.forEach { language ->
@@ -98,17 +109,10 @@ object WeatherApi {
                     val lon = item.optDouble("longitude", Double.NaN)
                     val name = item.optString("name").trim()
                     if (name.isBlank() || !lat.isFinite() || !lon.isFinite()) continue
-                    val city = CityPlace(
-                        name = name,
-                        region = item.optString("admin1"),
-                        country = item.optString("country"),
-                        latitude = lat,
-                        longitude = lon
-                    )
-                    val key = city.cacheKey
-                    val old = merged[key]
+                    val place = CityPlace(name, item.optString("admin1"), item.optString("country"), lat, lon)
+                    val old = merged[place.cacheKey]
                     if (old == null || (old.name.none { it.code in 0x0600..0x06FF } && name.any { it.code in 0x0600..0x06FF })) {
-                        merged[key] = city
+                        merged[place.cacheKey] = place
                     }
                 }
             }
@@ -141,7 +145,7 @@ object WeatherApi {
         connection.connectTimeout = 12_000
         connection.readTimeout = 18_000
         connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "QandilNative/3.6.0")
+        connection.setRequestProperty("User-Agent", "QandilNative/3.6.1")
         try {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
