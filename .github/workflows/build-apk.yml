@@ -1,24 +1,20 @@
-name: Build Qandil Weather APK v3.5.1
+name: Build Native Qandil Weather APK
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - 'PiranshahrWeather-GitHub.zip'
-      - 'redesign-weather.py'
-      - 'weather-ios.html'
-      - 'qandil_icon.xml'
-      - 'qandil_icon.webp'
-      - '.github/workflows/build-apk.yml'
+      - 'native-android/**'
       - 'package.json'
       - 'src/**'
       - 'tests/**'
       - 'tools/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
 concurrency:
-  group: qandil-weather-build
-  cancel-in-progress: true
+  group: qandil-weather-native-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -26,6 +22,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -33,462 +32,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install pinned TypeScript compiler
-        run: npm install --no-audit --no-fund --no-package-lock
-
-      - name: Compile and test TypeScript weather core
+      - name: Install and test weather core
         run: |
+          npm install --no-audit --no-fund --no-package-lock
           npm run build:core
           npm run test:core
           npm run test:city-search
           npm run test:runtime
-
-      - name: Extract Android project
-        run: |
-          test -f PiranshahrWeather-GitHub.zip
-          unzip -q -o PiranshahrWeather-GitHub.zip -d .
-          test -f piranshahr-weather-android/settings.gradle.kts
-          test -f piranshahr-weather-android/app/src/main/AndroidManifest.xml
-
-      - name: Install Qandil weather interface
-        working-directory: piranshahr-weather-android
-        run: python3 ../redesign-weather.py
-
-      - name: Apply Qandil app branding and launcher icon
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          manifest = Path("app/src/main/AndroidManifest.xml")
-          text = manifest.read_text(encoding="utf-8")
-          text = re.sub(r'android:label="[^"]*"', 'android:label="آب‌وهوای قندیل"', text, count=1)
-          text = re.sub(r'android:icon="[^"]*"', 'android:icon="@drawable/ic_launcher"', text, count=1)
-          text = re.sub(r'android:roundIcon="[^"]*"', 'android:roundIcon="@drawable/ic_launcher"', text, count=1)
-          manifest.write_text(text, encoding="utf-8")
-          icon = Path("app/src/main/res/drawable/ic_launcher.xml")
-          icon.parent.mkdir(parents=True, exist_ok=True)
-          icon.write_text(Path("../qandil_icon.xml").read_text(encoding="utf-8"), encoding="utf-8")
-          print("Qandil app name and launcher icon installed.")
-          PY
-
-      - name: Configure Android location permissions
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("app/src/main/AndroidManifest.xml")
-          text = path.read_text(encoding="utf-8")
-          permissions = [
-              "android.permission.ACCESS_FINE_LOCATION",
-              "android.permission.ACCESS_COARSE_LOCATION",
-              "android.permission.POST_NOTIFICATIONS",
-          ]
-          additions = "".join(
-              f'    <uses-permission android:name="{permission}" />\n'
-              for permission in permissions
-              if permission not in text
-          )
-          if additions:
-              end = text.find(">", text.find("<manifest"))
-              if end < 0:
-                  raise SystemExit("Invalid AndroidManifest.xml")
-              text = text[:end + 1] + "\n" + additions + text[end + 1:]
-              path.write_text(text, encoding="utf-8")
-          print("Android location permissions declared.")
-          PY
-
-      - name: Configure native Qandil labels, notifications, and GPS
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          activity = Path("app/src/main/java/com/example/weather/MainActivity.kt")
-          text = activity.read_text(encoding="utf-8")
-          text = text.replace("آب و هوای پیرانشهر", "آب‌وهوای قندیل")
-
-          imports = [
-              "import android.Manifest",
-              "import android.app.Activity",
-              "import android.content.pm.PackageManager",
-              "import android.webkit.GeolocationPermissions",
-              "import android.webkit.WebChromeClient",
-          ]
-          for item in imports:
-              if item not in text:
-                  text = text.replace("package com.example.weather\n", "package com.example.weather\n\n" + item + "\n", 1)
-
-          geo_object = """private object QandilGeoPermission {
-              var origin: String? = null
-              var callback: GeolocationPermissions.Callback? = null
-          }
-
-          """
-          if "private object QandilGeoPermission" not in text:
-              text = text.replace("class MainActivity : ComponentActivity() {", geo_object + "class MainActivity : ComponentActivity() {", 1)
-
-          permission_result = """    override fun onRequestPermissionsResult(
-              requestCode: Int,
-              permissions: Array<String>,
-              grantResults: IntArray
-          ) {
-              super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-              if (requestCode == 1002) {
-                  val granted = grantResults.any { it == PackageManager.PERMISSION_GRANTED }
-                  QandilGeoPermission.callback?.invoke(QandilGeoPermission.origin ?: "", granted, false)
-                  AndroidBridge.activeBridge?.onLocationPermissionResult(granted)
-                  QandilGeoPermission.callback = null
-                  QandilGeoPermission.origin = null
-              }
-          }
-
-          """
-          if "requestCode == 1002" not in text:
-              text = text.replace("    private fun configureSystemBars() {", permission_result + "    private fun configureSystemBars() {", 1)
-
-          text = text.replace(
-              "                        javaScriptEnabled = true",
-              "                        javaScriptEnabled = true\n                        setGeolocationEnabled(true)",
-              1
-          )
-          chrome = """                    webChromeClient = object : WebChromeClient() {
-                          override fun onGeolocationPermissionsShowPrompt(
-                              origin: String?,
-                              callback: GeolocationPermissions.Callback?
-                          ) {
-                              var currentContext: android.content.Context = context
-                              var activity: Activity? = currentContext as? Activity
-                              while (activity == null && currentContext is android.content.ContextWrapper) {
-                                  currentContext = currentContext.baseContext
-                                  activity = currentContext as? Activity
-                              }
-                              if (activity == null || callback == null) {
-                                  callback?.invoke(origin ?: "", false, false)
-                                  return
-                              }
-                              val fine = activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                              val coarse = activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                              if (fine || coarse) {
-                                  callback.invoke(origin ?: "", true, false)
-                              } else {
-                                  QandilGeoPermission.origin = origin
-                                  QandilGeoPermission.callback = callback
-                                  activity.requestPermissions(
-                                      arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-                                      1002
-                                  )
-                              }
-                          }
-                      }
-
-          """
-          if "onGeolocationPermissionsShowPrompt" not in text:
-              text = text.replace("                    // Bridge to native Android APIs", chrome + "                    // Bridge to native Android APIs", 1)
-
-          activity.write_text(text, encoding="utf-8")
-
-          helper = Path("app/src/main/java/com/example/weather/NotificationHelper.kt")
-          helper_text = helper.read_text(encoding="utf-8")
-          helper_text = helper_text.replace("اعلان‌های هشدار بارش و تغییرات وضعیت جوی پیرانشهر", "اعلان‌های هشدار بارش و تغییرات وضعیت جوی")
-          helper.write_text(helper_text, encoding="utf-8")
-          print("Qandil splash branding, native rain alerts, and WebView GPS permissions configured.")
-          PY
-
-      - name: Fix Huawei-compatible native location and notification bridge
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          bridge = Path("app/src/main/java/com/example/weather/AndroidBridge.kt")
-          bridge.write_text(r'''package com.example.weather
-
-          import android.Manifest
-          import android.app.Activity
-          import android.app.NotificationManager
-          import android.content.Context
-          import android.content.ContextWrapper
-          import android.content.Intent
-          import android.content.pm.PackageManager
-          import android.location.Location
-          import android.location.LocationListener
-          import android.location.LocationManager
-          import android.os.Build
-          import android.os.Bundle
-          import android.os.Handler
-          import android.os.Looper
-          import android.provider.Settings
-          import android.webkit.JavascriptInterface
-          import android.webkit.WebView
-          import androidx.core.app.ActivityCompat
-          import androidx.core.app.NotificationManagerCompat
-
-          class AndroidBridge(private val context: Context, private val webView: WebView) {
-              companion object { var activeBridge: AndroidBridge? = null }
-              init { activeBridge = this }
-              private var locationManager: LocationManager? = null
-              private var locationListener: LocationListener? = null
-              private val handler = Handler(Looper.getMainLooper())
-
-              private fun hostActivity(): Activity? {
-                  var current: Context = context
-                  while (current is ContextWrapper) {
-                      if (current is Activity) return current
-                      current = current.baseContext
-                  }
-                  return current as? Activity
-              }
-
-              @JavascriptInterface
-              fun isNativeAndroid(): Boolean = true
-
-              @JavascriptInterface
-              fun requestNotificationPermission(): String {
-                  val activity = hostActivity() ?: return "unavailable"
-                  if (Build.VERSION.SDK_INT >= 33) {
-                      if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return "granted"
-                      activity.runOnUiThread {
-                          ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
-                      }
-                      return "requested"
-                  }
-                  val enabled = NotificationManagerCompat.from(activity).areNotificationsEnabled()
-                  if (enabled) return "granted"
-                  activity.runOnUiThread {
-                      val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
-                      activity.startActivity(intent)
-                  }
-                  return "settings"
-              }
-
-              @JavascriptInterface
-              fun showNativeNotification(title: String, body: String, tag: String): Boolean {
-                  return NotificationHelper.show(context, title, body, tag)
-              }
-
-              @JavascriptInterface
-              fun requestNativeLocation() {
-                  val activity = hostActivity() ?: run { deliverLocationError("activity"); return }
-                  activity.runOnUiThread {
-                      val fine = ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                      val coarse = ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                      if (!fine && !coarse) {
-                          ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1002)
-                      } else {
-                          findLocation()
-                      }
-                  }
-              }
-
-              fun onLocationPermissionResult(granted: Boolean) {
-                  if (granted) findLocation() else deliverLocationError("permission")
-              }
-
-              private fun findLocation() {
-                  try {
-                      val activity = hostActivity() ?: run { deliverLocationError("activity"); return }
-                      val fine = ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                      val coarse = ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                      if (!fine && !coarse) { deliverLocationError("permission"); return }
-
-                      val manager = activity.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                      locationManager = manager
-                      val providers = manager.getProviders(true).filter {
-                          it == LocationManager.GPS_PROVIDER || it == LocationManager.NETWORK_PROVIDER || it == LocationManager.PASSIVE_PROVIDER
-                      }
-                      val recent = providers.mapNotNull { provider ->
-                          try { manager.getLastKnownLocation(provider) } catch (_: SecurityException) { null }
-                      }.maxByOrNull { it.time }
-                      if (recent != null && System.currentTimeMillis() - recent.time < 120000L) {
-                          deliverLocation(recent)
-                          return
-                      }
-
-                      stopLocationUpdates()
-                      var completed = false
-                      val listener = object : LocationListener {
-                          override fun onLocationChanged(location: Location) {
-                              if (!completed) {
-                                  completed = true
-                                  stopLocationUpdates()
-                                  deliverLocation(location)
-                              }
-                          }
-                          @Deprecated("Deprecated by Android")
-                          override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-                          override fun onProviderEnabled(provider: String) {}
-                          override fun onProviderDisabled(provider: String) {}
-                      }
-                      locationListener = listener
-                      providers.forEach { provider ->
-                          try { manager.requestLocationUpdates(provider, 1000L, 0f, listener, Looper.getMainLooper()) } catch (_: Exception) {}
-                      }
-                      handler.postDelayed({
-                          if (!completed) {
-                              completed = true
-                              stopLocationUpdates()
-                              val fallback = providers.mapNotNull { p -> try { manager.getLastKnownLocation(p) } catch (_: Exception) { null } }.maxByOrNull { it.time }
-                              if (fallback != null) deliverLocation(fallback) else deliverLocationError("timeout")
-                          }
-                      }, 20000L)
-                  } catch (_: Exception) {
-                      deliverLocationError("unavailable")
-                  }
-              }
-
-              private fun stopLocationUpdates() {
-                  try { locationListener?.let { locationManager?.removeUpdates(it) } } catch (_: Exception) {}
-                  locationListener = null
-              }
-
-              private fun deliverLocation(location: Location) {
-                  val js = "window.onQandilNativeLocation && window.onQandilNativeLocation(${location.latitude},${location.longitude},${location.accuracy})"
-                  webView.post { webView.evaluateJavascript(js, null) }
-              }
-
-              private fun deliverLocationError(reason: String) {
-                  val js = "window.onQandilNativeLocationError && window.onQandilNativeLocationError('${reason}')"
-                  webView.post { webView.evaluateJavascript(js, null) }
-              }
-
-              @JavascriptInterface
-              fun vibrate(ms: Long) {
-                  try {
-                      @Suppress("DEPRECATION")
-                      val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator?.vibrate(android.os.VibrationEffect.createOneShot(ms, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                      else vibrator?.vibrate(ms)
-                  } catch (_: Exception) {}
-              }
-          }
-          ''', encoding="utf-8")
-
-          activity = Path("app/src/main/java/com/example/weather/MainActivity.kt")
-          source = activity.read_text(encoding="utf-8")
-          source = source.replace(
-              'addJavascriptInterface(AndroidBridge(context), "AndroidBridge")',
-              'addJavascriptInterface(AndroidBridge(context, this), "AndroidBridge")'
-          )
-          if "AndroidBridge.activeBridge?.onLocationPermissionResult(granted)" not in source:
-              source = source.replace(
-                  "                  QandilGeoPermission.callback?.invoke(QandilGeoPermission.origin ?: \"\", granted, false)",
-                  "                  QandilGeoPermission.callback?.invoke(QandilGeoPermission.origin ?: \"\", granted, false)\n                  AndroidBridge.activeBridge?.onLocationPermissionResult(granted)"
-              )
-          activity.write_text(source, encoding="utf-8")
-          print("Native location now uses Android LocationManager (no GMS dependency); notification permission handles Android 10+ correctly.")
-          PY
-
-      - name: Validate replacement weather app
-        working-directory: piranshahr-weather-android
-        run: python3 ../tools/validate_project.py
-
-      - name: Validate weather JavaScript syntax
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import subprocess
-          import tempfile
-
-          html = Path("app/src/main/assets/weather.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script\b[^>]*>(.*?)</script\s*>", html, flags=re.IGNORECASE | re.DOTALL)
-          if not scripts:
-              raise SystemExit("No inline JavaScript was found in weather.html")
-          with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8") as js:
-              js.write("\n;\n".join(scripts))
-              js.flush()
-              subprocess.run(["node", "--check", js.name], check=True)
-          print(f"JavaScript syntax validation passed ({len(scripts)} inline script block(s)).")
-          PY
-
-      - name: Set Android app version
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          candidates = [Path("app/build.gradle.kts"), Path("app/build.gradle")]
-          gradle_file = next((p for p in candidates if p.is_file()), None)
-          if gradle_file is None:
-              raise SystemExit("App module Gradle file not found")
-          content = gradle_file.read_text()
-          content, code_count = re.subn(r"(?m)(\bversionCode\s*(?:=\s*)?)\d+", r'\g<1>31', content, count=1)
-          content, name_count = re.subn(r"""(?m)(\bversionName\s*(?:=\s*)?)["'][^"']*["']""", r'\g<1>"3.5.1"', content, count=1)
-          if code_count != 1 or name_count != 1:
-              raise SystemExit(f"Could not safely update version fields in {gradle_file}")
-          gradle_file.write_text(content)
-          print(f"Configured {gradle_file}: versionCode=31, versionName=3.5.1")
-          PY
-
-      - name: Configure permanent release signing
-        working-directory: piranshahr-weather-android
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          candidates = [Path("app/build.gradle.kts"), Path("app/build.gradle")]
-          gradle_file = next((p for p in candidates if p.is_file()), None)
-          if gradle_file is None:
-              raise SystemExit("App module Gradle file not found")
-          if gradle_file.suffix == ".kts":
-              signing = """
-
-          android {
-              signingConfigs {
-                  create("release") {
-                      storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
-                      storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-              }
-              buildTypes {
-                  getByName("release") {
-                      signingConfig = signingConfigs.getByName("release")
-                  }
-              }
-          }
-          """
-          else:
-              signing = """
-
-          android {
-              signingConfigs {
-                  release {
-                      storeFile file(System.getenv("ANDROID_KEYSTORE_PATH"))
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-              }
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                  }
-              }
-          }
-          """
-          original = gradle_file.read_text()
-          if "ANDROID_KEYSTORE_PATH" not in original:
-              gradle_file.write_text(original + signing)
-          print(f"Configured permanent release signing in {gradle_file}")
-          PY
-
-      - name: Read Android app version
-        id: app_version
-        working-directory: piranshahr-weather-android
-        shell: bash
-        run: |
-          GRADLE_FILE=$(find app -maxdepth 1 -type f \( -name 'build.gradle.kts' -o -name 'build.gradle' \) | head -n1)
-          VERSION_NAME=$(sed -nE "s/.*versionName[[:space:]]*=?[[:space:]]*['\"]([^'\"]+)['\"].*/\1/p" "$GRADLE_FILE" | head -n1)
-          if [ -z "$VERSION_NAME" ]; then
-            echo "Could not read versionName from $GRADLE_FILE"
-            exit 1
-          fi
-          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "Building Piranshahr Weather v$VERSION_NAME"
 
       - uses: actions/setup-java@v4
         with:
@@ -497,75 +47,56 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.6'
+          gradle-version: '8.9'
 
-      - name: Remove obsolete debug APK from this version
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_TAG: ${{ steps.app_version.outputs.tag }}
+      - name: Install Android SDK
         run: |
-          if gh release view "$CURRENT_TAG" >/dev/null 2>&1; then
-            gh release delete-asset "$CURRENT_TAG" app-debug.apk --yes || true
-          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Prepare permanent signing key
+      - name: Restore permanent release signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
+          set -euo pipefail
           test -n "$ANDROID_KEYSTORE_BASE64"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mobin-apps-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mobin-apps-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/mobin-apps-release.jks" >> "$GITHUB_ENV"
 
-      - name: Fix notification launcher resource reference
-        working-directory: piranshahr-weather-android
-        run: |
-          sed -i 's/R\.mipmap\.ic_launcher/R.drawable.ic_launcher/g' app/src/main/java/com/example/weather/NotificationHelper.kt
-
-      - name: Build signed release APK
-        working-directory: piranshahr-weather-android
+      - name: Build native Qandil APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle assembleRelease -x lintVitalRelease
+        run: gradle -p native-android :app:assembleRelease
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Verify APK identity and signature
+        run: |
+          set -euo pipefail
+          APK="native-android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='32' versionName='3.6.0'"
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: Piranshahr-Weather-APK
-          path: piranshahr-weather-android/app/build/outputs/apk/release/app-release.apk
+          name: Qandil-Native-APK
+          path: native-android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          retention-days: 30
 
-      - name: Publish versioned APK release
+      - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.app_version.outputs.tag }}
-          name: آب‌وهوای قندیل v${{ steps.app_version.outputs.name }}
+          tag_name: v3.6.0
+          name: Qandil Weather v3.6.0 (Native)
           body: |
-            ## آب‌وهوای قندیل v${{ steps.app_version.outputs.name }}
+            ## آب‌وهوای قندیل 3.6.0
 
-            APK اندروید برنامهٔ آب‌وهوای قندیل.
+            نسخهٔ Native مبتنی بر Kotlin و Jetpack Compose.
 
-            - **Version:** ${{ steps.app_version.outputs.name }}
-            - **File:** app-release.apk
-
-            - Kotlin: لایهٔ native اندروید و اعلان‌ها
-            - TypeScript: هستهٔ منطق هواشناسی
-            - Python: ادغام و کنترل کیفیت پروژه
-            - HTML/CSS: رابط کاربری
-
-            بازسازی همین نسخه، فایل انتشار موجود را به‌روزرسانی می‌کند و نسخهٔ تکراری نمی‌سازد.
-          files: piranshahr-weather-android/app/build/outputs/apk/release/app-release.apk
+            - Package: com.example.weather
+            - Version code: 32
+            - Native Android UI
+          files: native-android/app/build/outputs/apk/release/app-release.apk
           make_latest: true
           fail_on_unmatched_files: true
-
-      - name: Keep only the latest release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_TAG: ${{ steps.app_version.outputs.tag }}
-        run: |
-          while IFS= read -r tag; do
-            if [ -n "$tag" ] && [ "$tag" != "$CURRENT_TAG" ]; then
-              gh release delete "$tag" --yes --cleanup-tag
-            fi
-          done < <(gh release list --limit 100 --json tagName --jq '.[].tagName')
