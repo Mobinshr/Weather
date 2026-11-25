@@ -14,8 +14,8 @@ class WeatherRepository(context: Context) {
                 json.optString("name", "پیرانشهر"),
                 json.optString("region"),
                 json.optString("country"),
-                json.optDouble("latitude", 36.701),
-                json.optDouble("longitude", 45.141)
+                json.optDouble("latitude", 36.6959),
+                json.optDouble("longitude", 45.1413)
             )
         }.getOrDefault(CityPlace.piranshahr())
     }
@@ -76,10 +76,11 @@ class WeatherRepository(context: Context) {
         editor.putStringSet(CACHE_KEYS, keys.toSet()).apply()
     }
 
-    private fun cachePreferenceKey(city: CityPlace) = "weather_${city.cacheKey}"
+    // New cache namespace: old 3.6.0 entries do not contain sunrise/sunset and is_day.
+    private fun cachePreferenceKey(city: CityPlace) = "weather_v2_${city.cacheKey}"
 
     companion object {
-        private const val CACHE_KEYS = "cache_keys"
+        private const val CACHE_KEYS = "cache_keys_v2"
         private const val MAX_CACHED_CITIES = 12
         private const val MAX_AGE_MS = 24L * 60L * 60L * 1000L
         private const val FRESH_MS = 15L * 60L * 1000L

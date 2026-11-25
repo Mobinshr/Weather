@@ -75,7 +75,7 @@ jobs:
           APK="native-android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='32' versionName='3.6.0'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='33' versionName='3.6.1'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -87,16 +87,20 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.0
-          name: Qandil Weather v3.6.0 (Native)
+          tag_name: v3.6.1
+          name: Qandil Weather v3.6.1 (Native · Classic layout)
           body: |
-            ## آب‌وهوای قندیل 3.6.0
+            ## آب‌وهوای قندیل 3.6.1
 
-            نسخهٔ Native مبتنی بر Kotlin و Jetpack Compose.
+            رابط Native با بازگردانی چیدمان و امکانات نسخهٔ قبلی قندیل.
 
             - Package: com.example.weather
-            - Version code: 32
-            - Native Android UI
+            - Version code: 33
+            - Kotlin + Jetpack Compose
+            - دو نمودار دمایی و احتمال بارش ۲۴ ساعت آینده
+            - پیش‌بینی ساعتی و هفت‌روزه، کارت‌های UV، طلوع/غروب، باد، حس واقعی، رطوبت، بارش، کیفیت هوا و فشار
+            - پس‌زمینهٔ پویا بر اساس هوا و شب/روز
+            - کش محلی، تازه‌سازی خودکار و هشدار بارش
           files: native-android/app/build/outputs/apk/release/app-release.apk
           make_latest: true
           fail_on_unmatched_files: true
