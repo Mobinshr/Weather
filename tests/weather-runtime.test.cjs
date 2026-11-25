@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'weather-ios.html'), 'utf8');
-assert.equal((html.match(/#sug\s*\{/g) || []).length, 1, 'dropdown CSS must have one base selector');
+assert.equal((html.match(/#sug\\{position:absolute/g) || []).length, 1, 'the dropdown must have one authoritative floating layout rule');
+assert.doesNotMatch(html, /#sug\\{position:relative/, 'the obsolete in-flow dropdown layout must be absent');
 assert.match(html, /#sug\[hidden\]\{display:none!important\}/);
 assert.match(html, /#sug li:hover/);
 
