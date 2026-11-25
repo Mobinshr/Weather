@@ -69,6 +69,27 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle -p native-android :app:assembleRelease
 
+      - name: Apply V1 and V2 signatures using apksigner
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APK="native-android/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$ANDROID_KEYSTORE_PATH" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --min-sdk-version 24 \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out "$RUNNER_TEMP/qandil-dual-signed.apk" \
+            "$APK"
+          mv "$RUNNER_TEMP/qandil-dual-signed.apk" "$APK"
+
       - name: Verify APK identity and both signing schemes
         run: |
           set -euo pipefail
@@ -78,7 +99,7 @@ jobs:
           echo "$VERIFY_OUTPUT"
           grep -F "Verified using v1 scheme (JAR signing): true" <<< "$VERIFY_OUTPUT"
           grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='35' versionName='3.6.3'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='36' versionName='3.6.4'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,17 +111,17 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.3
-          name: Qandil Weather v3.6.3 (Native · dual-signature compatibility fix)
+          tag_name: v3.6.4
+          name: Qandil Weather v3.6.4 (Native · dual-signature compatibility fix)
           body: |
-            ## آب‌وهوای قندیل 3.6.3
+            ## آب‌وهوای قندیل 3.6.4
 
             نسخهٔ عیب‌یابی قندیل با سازگاری بیشتر برای نصب‌کننده‌های اندرویدی.
 
             - Package: com.example.weather
-            - Version code: 35
+            - Version code: 36
             - Kotlin + Jetpack Compose
-            - امضای V1 و V2 هر دو فعال و هنگام ساخت بررسی می‌شوند.
+            - APK پس از ساخت با apksigner دوباره با امضای V1 و V2 امضا و هر دو امضا به‌صورت اجباری بررسی می‌شوند.
             - ثبت خطاهای بسته‌شدن ناگهانی و نمایش گزارش قابل کپی در اجرای بعدی
             - طراحی کلاسیک، پیش‌بینی‌ها، نمودارها و هشدار بارش
           files: native-android/app/build/outputs/apk/release/app-release.apk
