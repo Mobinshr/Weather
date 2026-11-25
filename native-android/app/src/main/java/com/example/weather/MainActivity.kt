@@ -634,15 +634,19 @@ private fun StatCard(
         Text(value, color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(level, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         if (progress != null) {
-            Box(
-                Modifier.fillMaxWidth().padding(top = 10.dp).height(5.dp)
-                    .clip(CircleShape)
-                    .background(Brush.horizontalGradient(listOf(Color(0xFF3EC46D), Color(0xFFF5D63D), Color(0xFFF5963D), Color(0xFFE8453C), Color(0xFFA24BD6))))
-            ) {
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(8.dp)) {
                 Box(
-                    Modifier.align(Alignment.CenterStart).fillMaxWidth(progress.toFloat().coerceIn(0f, 1f))
-                        .height(5.dp).clip(CircleShape).background(Color.Transparent)
+                    Modifier.align(Alignment.CenterStart).fillMaxWidth().height(5.dp)
+                        .clip(CircleShape)
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF3EC46D), Color(0xFFF5D63D), Color(0xFFF5963D), Color(0xFFE8453C), Color(0xFFA24BD6))))
                 )
+                Canvas(Modifier.fillMaxWidth().height(8.dp)) {
+                    drawCircle(
+                        Color.White,
+                        4.dp.toPx(),
+                        Offset(size.width * progress.toFloat().coerceIn(0f, 1f), size.height / 2)
+                    )
+                }
             }
         }
         Text(note, color = Color.White.copy(alpha = .78f), fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))

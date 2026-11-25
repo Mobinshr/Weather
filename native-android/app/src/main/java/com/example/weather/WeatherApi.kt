@@ -57,7 +57,7 @@ object WeatherApi {
         val sunsets = dailyJson.optJSONArray("sunset") ?: JSONArray()
         val dailySize = minOf(
             dayTimes.length(), minTemps.length(), maxTemps.length(),
-            dayProbabilities.length(), dayCodes.length(), uv.length()
+            dayProbabilities.length(), dayCodes.length(), uv.length(), sunrises.length(), sunsets.length()
         )
         val daily = (0 until dailySize).map { index ->
             DayForecast(
