@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.weather"
         minSdk = 24
         targetSdk = 34
-        versionCode = 34
-        versionName = "3.6.2"
+        versionCode = 35
+        versionName = "3.6.3"
     }
 
     buildFeatures { compose = true }
@@ -33,6 +33,11 @@ android {
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
             }
+            // Keep both legacy JAR (v1) and modern APK signatures.
+            // Some OEM Android installers may fail to recognize v2-only APKs.
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
     buildTypes {
