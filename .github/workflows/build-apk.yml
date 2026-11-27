@@ -127,3 +127,17 @@ jobs:
           files: native-android/app/build/outputs/apk/release/app-release.apk
           make_latest: true
           fail_on_unmatched_files: true
+
+      - name: Keep only the latest published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_TAG: v3.6.8
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            if [ "$tag" != "$CURRENT_TAG" ]; then
+              gh release delete "$tag" --repo "$REPOSITORY" --cleanup-tag --yes || true
+            fi
+          done < <(gh release list --repo "$REPOSITORY" --limit 100 --json tagName --jq '.[].tagName')
