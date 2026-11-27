@@ -23,6 +23,10 @@ class QandilApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        val rainAlertsEnabled = getSharedPreferences("qandil_native", Context.MODE_PRIVATE)
+            .getBoolean("rain_notifications", false)
+        if (rainAlertsEnabled) scheduleRainMonitoring(this)
+
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {

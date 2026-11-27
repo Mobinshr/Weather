@@ -13,6 +13,7 @@ import java.net.URLEncoder
 import kotlin.math.roundToInt
 
 object WeatherApi {
+    private const val MAX_RESPONSE_CHARS = 2 * 1024 * 1024
     suspend fun fetch(city: CityPlace): WeatherSnapshot = withContext(Dispatchers.IO) {
         val forecastUrl = "https://api.open-meteo.com/v1/forecast" +
             "?latitude=${city.latitude}&longitude=${city.longitude}" +
@@ -145,13 +146,26 @@ object WeatherApi {
         connection.connectTimeout = 12_000
         connection.readTimeout = 18_000
         connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "QandilNative/3.6.1")
+        connection.setRequestProperty("User-Agent", "QandilNative/3.6.8")
         try {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.use { input ->
-                BufferedReader(InputStreamReader(input, Charsets.UTF_8)).use { it.readText() }
+                BufferedReader(InputStreamReader(input, Charsets.UTF_8)).use { reader ->
+                    val output = StringBuilder()
+                    val buffer = CharArray(8192)
+                    while (true) {
+                        val count = reader.read(buffer)
+                        if (count < 0) break
+                        if (output.length + count > MAX_RESPONSE_CHARS) {
+                            throw IOException("پاسخ سرور بیش از حد بزرگ است")
+                        }
+                        output.append(buffer, 0, count)
+                    }
+                    output.toString()
+                }
             }.orEmpty()
+            if (body.isBlank()) throw IOException("پاسخ خالی از سرور دریافت شد")
             if (status !in 200..299) throw IOException("HTTP $status")
             return JSONObject(body)
         } finally {

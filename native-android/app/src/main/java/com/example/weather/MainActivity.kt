@@ -153,13 +153,19 @@ private fun QandilWeatherApp() {
         notificationsEnabled = granted
         repository.setNotificationsEnabled(granted)
         status = if (granted) "اعلان بارش فعال شد" else "مجوز اعلان داده نشد"
-        if (granted) weather?.let { sendRainNotifications(context, it) }
+        if (granted) {
+            scheduleRainMonitoring(context)
+            weather?.let { sendRainNotifications(context, it) }
+        } else {
+            cancelRainMonitoring(context)
+        }
     }
 
     LaunchedEffect(Unit) {
+        if (notificationsEnabled) scheduleRainMonitoring(context)
         while (true) {
             clock = System.currentTimeMillis()
-            delay(1_000)
+            delay(60_000)
         }
     }
 
@@ -237,6 +243,7 @@ private fun QandilWeatherApp() {
                     if (notificationsEnabled) {
                         notificationsEnabled = false
                         repository.setNotificationsEnabled(false)
+                        cancelRainMonitoring(context)
                         status = "اعلان‌ها خاموش شد"
                     } else if (Build.VERSION.SDK_INT >= 33 &&
                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -244,6 +251,7 @@ private fun QandilWeatherApp() {
                     else {
                         notificationsEnabled = true
                         repository.setNotificationsEnabled(true)
+                        scheduleRainMonitoring(context)
                         status = "اعلان بارش فعال شد"
                         data?.let { sendRainNotifications(context, it) }
                     }
@@ -746,7 +754,7 @@ private fun requestLastOrCurrentLocation(
     }
 }
 
-private fun sendRainNotifications(context: Context, weather: WeatherSnapshot) {
+internal fun sendRainNotifications(context: Context, weather: WeatherSnapshot) {
     if (Build.VERSION.SDK_INT >= 33 &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) return
