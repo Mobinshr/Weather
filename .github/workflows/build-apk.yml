@@ -99,7 +99,7 @@ jobs:
           echo "$VERIFY_OUTPUT"
           grep -F "Verified using v1 scheme (JAR signing): true" <<< "$VERIFY_OUTPUT"
           grep -F "Verified using v2 scheme (APK Signature Scheme v2): true" <<< "$VERIFY_OUTPUT"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='40' versionName='3.6.8'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.example.weather' versionCode='41' versionName='3.6.9'"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -111,15 +111,17 @@ jobs:
       - name: Publish versioned Native APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.8
-          name: Qandil Weather v3.6.8 (Native · legacy V1 + V2 signatures)
+          tag_name: v3.6.9
+          name: Qandil Weather v3.6.9 (Native · legacy V1 + V2 signatures)
           body: |
-            ## آب‌وهوای قندیل 3.6.8
+            ## آب‌وهوای قندیل 3.6.9
 
             نسخهٔ عیب‌یابی قندیل با سازگاری بیشتر برای نصب‌کننده‌های اندرویدی.
 
             - Package: com.example.weather
-            - Version code: 40
+            - App version: 3.6.9
+            - Version code: 41
+            - Minimum Android: 7.0 (API 24)
             - Kotlin + Jetpack Compose
             - APK پس از ساخت با apksigner دوباره با امضای V1 و V2 امضا و هر دو امضا به‌صورت اجباری بررسی می‌شوند.
             - ثبت خطاهای بسته‌شدن ناگهانی و نمایش گزارش قابل کپی در اجرای بعدی
@@ -132,7 +134,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          CURRENT_TAG: v3.6.8
+          CURRENT_TAG: v3.6.9
         run: |
           set -euo pipefail
           while IFS= read -r tag; do

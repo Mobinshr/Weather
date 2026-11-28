@@ -346,6 +346,7 @@ private fun SearchToolbar(
         IconButton(onClick = onRefresh, enabled = !loading, modifier = Modifier.size(38.dp)) {
             Icon(Icons.Default.Refresh, contentDescription = "به‌روزرسانی", tint = Color.White)
         }
+        AppUpdateControl()
     }
 }
 
