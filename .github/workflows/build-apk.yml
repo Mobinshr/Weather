@@ -120,7 +120,7 @@ jobs:
 
             - Package: com.example.weather
             - App version: 3.6.12
-            - Version code: 43
+            - Version code: 44
             - Minimum Android: 7.0 (API 24)
             - Kotlin + Jetpack Compose
             - APK پس از ساخت با apksigner دوباره با امضای V1 و V2 امضا و هر دو امضا به‌صورت اجباری بررسی می‌شوند.
