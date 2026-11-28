@@ -188,6 +188,7 @@ internal fun AppUpdateControl() {
                 checking = true
                 try {
                     val available = AppUpdateClient.checkForUpdate(context)
+                    preferences.edit().putLong("last_update_check", System.currentTimeMillis()).apply()
                     updateInfo = available
                     if (available == null && showFeedback) {
                         feedbackMessage = "برنامه به‌روز است و نسخهٔ جدیدتری پیدا نشد."
@@ -197,7 +198,6 @@ internal fun AppUpdateControl() {
                         feedbackMessage = error.message ?: "بررسی به‌روزرسانی ناموفق بود؛ اتصال اینترنت را بررسی کن."
                     }
                 } finally {
-                    preferences.edit().putLong("last_update_check", System.currentTimeMillis()).apply()
                     checking = false
                 }
             }
