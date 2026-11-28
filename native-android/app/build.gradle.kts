@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.weather"
         minSdk = 24
         targetSdk = 34
-        versionCode = 42
-        versionName = "3.6.10"
+        versionCode = 43
+        versionName = "3.6.11"
     }
 
     buildFeatures {
